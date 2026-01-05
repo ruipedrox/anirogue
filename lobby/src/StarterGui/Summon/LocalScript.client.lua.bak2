@@ -1,0 +1,463 @@
+-- Diagnostic: Print script.Parent and its class at startup
+
+print("[SummonUI] LocalScript parent:", script.Parent, script.Parent and script.Parent.ClassName or "nil")
+if not script.Parent or not script.Parent:IsA("ScreenGui") and not script.Parent:IsA("Frame") then
+    warn("[SummonUI] LocalScript parent is nil or not a UI object! Aborting.")
+    return
+end
+
+local ReplicatedStorage = game:GetService("ReplicatedStorage")
+local player = game.Players.LocalPlayer
+local remotes = ReplicatedStorage:WaitForChild("Remotes")
+
+-- Listen for BannerUpdated RemoteEvent and set PlayerGui.CurrentBanner
+
+local BannerUpdated = remotes:FindFirstChild("BannerUpdated")
+local HttpService = game:GetService("HttpService")
+local playerGui = player:WaitForChild("PlayerGui")
+local function updateBannerIconsIfOpen()
+    print("[SummonUI] BannerUpdated event: updating icons...")
+    -- Defensive: try/catch
+    local ok, err = pcall(function()
+        if updateBannerIcons then updateBannerIcons() end
+    end)
+    if not ok then warn("[SummonUI] updateBannerIcons error:", err) end
+end
+if BannerUpdated then
+    BannerUpdated.OnClientEvent:Connect(function(banner)
+        print("[SummonUI] BannerUpdated event fired! banner:", typeof(banner), banner and HttpService:JSONEncode(banner) or "nil")
+        if not banner or type(banner) ~= "table" then
+            warn("[SummonUI] BannerUpdated received invalid banner:", typeof(banner), banner)
+            return
+        end
+        local ok, json = pcall(function() return HttpService:JSONEncode(banner) end)
+        if ok and json then
+            playerGui:SetAttribute("CurrentBanner", json)
+            print("[SummonUI] BannerUpdated received and CurrentBanner set. Attribute:", playerGui:GetAttribute("CurrentBanner"))
+            updateBannerIconsIfOpen()
+        else
+    -- ...existing code...
+            warn("[SummonUI] Failed to encode banner:", banner)
+        end
+    end)
+end
+
+print("[SummonUI] LocalScript iniciado!")
+
+local openRemote = remotes:WaitForChild("Open_Summon")
+local SummonClientReadyRE = remotes:WaitForChild("SummonClientReady")
+local TweenService = game:GetService("TweenService")
+local openSummonFunction = remotes:WaitForChild("OpenSummonFunction")
+
+print("[SummonUI] Registrando listener para Open_Summon...")
+
+local frame = script.Parent:FindFirstChild("Frame")
+local previewFrame = frame:FindFirstChild("Preview")
+if not frame then
+    warn("[SummonUI] Frame não encontrado! Parent:", tostring(script.Parent))
+    for _, child in ipairs(script.Parent:GetChildren()) do
+        print("[SummonUI] Child:", child.Name, child.ClassName)
+    end
+    return
+else
+    print("[SummonUI] Frame encontrado:", frame.Name)
+    frame.Visible = false -- começa invisível
+    frame.Position = UDim2.new(0, 0, -1, 0)
+    print("[SummonUI] Inicialização: Frame invisível e fora da tela.")
+    -- Preview frame começa invisível
+    previewFrame.Visible = false
+
+    -- ...existing code...
+end
+
+local isSummonUIOpen = false -- Garante que começa como false
+local receivedSummonEvent = false
+
+-- Função para abrir a UI
+local function openSummonUI()
+    -- Debug: Print all frames and their children inside Summon > Chars
+    local summonFrame = frame:FindFirstChild("Summon")
+    if not summonFrame then
+        warn("[SummonUI] Frame.Summon não encontrado.")
+        return
+    end
+    local charsFrame = summonFrame:FindFirstChild("Chars")
+    if not charsFrame then
+        warn("[SummonUI] Frame.Summon.Chars não encontrado.")
+        return
+    end
+    print("[SummonUI] Frames dentro de Summon > Chars:")
+    for _, unitFrame in ipairs(charsFrame:GetChildren()) do
+        if unitFrame:IsA("Frame") then
+            print("  Frame:", unitFrame.Name)
+            for _, child in ipairs(unitFrame:GetChildren()) do
+                print("    Child:", child.Name, child.ClassName)
+            end
+        end
+    end
+    if isSummonUIOpen then
+        print("[SummonUI] UI já está aberta, animação ignorada.")
+        return
+    end
+    isSummonUIOpen = true
+    frame.Visible = true
+    frame.Position = UDim2.new(0, 0, -1, 0)
+    print("[SummonUI] UI de Summon aberta! Frame.Visible=", frame.Visible)
+    
+
+    -- Star color palette (same as inventory)
+    local StarColors = {
+        [1] = Color3.fromRGB(130,130,130), -- Comum
+        [2] = Color3.fromRGB(90,170,90),
+        [3] = Color3.fromRGB(70,130,255), -- Azul
+        [4] = Color3.fromRGB(180,85,255), -- Roxo
+        [5] = Color3.fromRGB(255,190,40), -- Dourado
+        [6] = Color3.fromRGB(255,50,50), -- Vermelho (6+)
+    }
+    local function colorForStars(stars)
+        return StarColors[stars] or Color3.fromRGB(255,255,255)
+    end
+
+    -- Função para atualizar gradiente de acordo com as estrelas
+    -- Refactored: Use same gradient logic as Chars_Inv
+    local function setStarGradient(grad, baseColor)
+        if not grad or not baseColor then return end
+        local h,s,v = baseColor:ToHSV()
+        -- Stronger contrast: top lighter, middle base, bottom darker
+        local lighter = Color3.fromHSV(h, math.clamp(s * 0.35, 0, 1), math.min(1, v * 1.25))
+        local darker = Color3.fromHSV(h, s, math.clamp(v * 0.35, 0, 1))
+        grad.Rotation = 90 -- vertical
+        grad.Color = ColorSequence.new({
+            ColorSequenceKeypoint.new(0, lighter),
+            ColorSequenceKeypoint.new(0.45, baseColor),
+            ColorSequenceKeypoint.new(1, darker),
+        })
+        grad.Transparency = NumberSequence.new({
+            NumberSequenceKeypoint.new(0, 0),
+            NumberSequenceKeypoint.new(1, 0),
+        })
+        print("[SummonUI][Preview] StarGrad updated:", grad.Name, grad.ClassName)
+        return grad
+    end
+
+    -- Função simples para abrir o preview com o ícone clicado
+    local function openPreview(iconImage, stars)
+        local previewFrameCurrent = frame:FindFirstChild("Preview")
+        print("[SummonUI][Preview] Preview frame:", previewFrameCurrent and previewFrameCurrent.Name or "nil", previewFrameCurrent and previewFrameCurrent.ClassName or "nil")
+        local icon_c = previewFrameCurrent and previewFrameCurrent:FindFirstChild("Icon_c")
+        print("[SummonUI][Preview] Icon_c:", icon_c and icon_c.Name or "nil", icon_c and icon_c.ClassName or "nil")
+        local eq_bg = icon_c and icon_c:FindFirstChild("EQ_BG")
+        print("[SummonUI][Preview] EQ_BG:", eq_bg and eq_bg.Name or "nil", eq_bg and eq_bg.ClassName or "nil")
+        local starGrad = eq_bg and eq_bg:FindFirstChild("StarGrad")
+        print("[SummonUI][Preview] StarGrad:", starGrad and starGrad.Name or "nil", starGrad and starGrad.ClassName or "nil")
+        local frameInEQ = eq_bg and eq_bg:FindFirstChild("Frame")
+        local charNameLabel = frameInEQ and frameInEQ:FindFirstChild("Char_name")
+        if eq_bg then
+            print("[SummonUI][Preview] Children of EQ_BG:")
+            for _, child in ipairs(eq_bg:GetChildren()) do
+                print("    Child:", child.Name, child.ClassName)
+            end
+        end
+        local previewIconCurrent = eq_bg and eq_bg:FindFirstChild("Icon")
+        print("[SummonUI][Preview] Icon:", previewIconCurrent and previewIconCurrent.Name or "nil", previewIconCurrent and previewIconCurrent.ClassName or "nil")
+        -- Set gradient color according to stars
+        if starGrad and stars then
+            local color = colorForStars(stars)
+            setStarGradient(starGrad, color)
+            print("[SummonUI][Preview] Gradient atualizado para estrelas em StarGrad:", stars)
+        end
+        -- Set character name in preview using CharacterCatalog
+        if charNameLabel and charNameLabel:IsA("TextLabel") then
+            local playerGui = player:FindFirstChild("PlayerGui")
+            local bannerJson = playerGui and playerGui:GetAttribute("CurrentBanner")
+            local displayName = "?"
+            local charId = nil
+            if bannerJson then
+                local HttpService = game:GetService("HttpService")
+                local ok, decoded = pcall(function() return HttpService:JSONDecode(bannerJson) end)
+                if ok and decoded and decoded.entries then
+                    for _, entry in ipairs(decoded.entries) do
+                        if entry.icon_id == iconImage then
+                            charId = entry.id
+                            break
+                        end
+                    end
+                end
+            end
+            -- Fetch from catalog
+            local ReplicatedStorage = game:GetService("ReplicatedStorage")
+            local CharacterCatalog = require(ReplicatedStorage:WaitForChild("Scripts"):WaitForChild("CharacterCatalog"))
+            if charId then
+                local catalogEntry = CharacterCatalog:Get(charId)
+                if catalogEntry and catalogEntry.displayName then
+                    displayName = catalogEntry.displayName
+                else
+                    displayName = charId
+                end
+            end
+            charNameLabel.Text = displayName
+            print("[SummonUI][Preview] Char_name label set to:", displayName)
+        end
+        if previewFrameCurrent and previewIconCurrent then
+            previewFrameCurrent.Visible = true
+            previewIconCurrent.Image = iconImage
+            print("[SummonUI][Preview] Preview aberto! Icon atualizado para:", iconImage)
+        else
+            print("[SummonUI][Preview] Falha ao abrir preview: previewFrameCurrent=", tostring(previewFrameCurrent), "previewIconCurrent=", tostring(previewIconCurrent))
+        end
+    end
+
+    -- Atualiza os ícones das unidades do banner conforme o catálogo e ordem do banner
+    local function updateBannerIcons()
+        local playerGui = player:FindFirstChild("PlayerGui")
+        local bannerJson = playerGui and playerGui:GetAttribute("CurrentBanner")
+        print("[SummonUI] updateBannerIcons called. CurrentBanner:", bannerJson)
+        -- Chance values from DevSummonTest logs
+        local rarityChances = {
+            ["5"] = 2.01,      -- 2.01% for the single 5★
+            ["4"] = 8.0,      -- 8% for each 4★
+            ["3"] = 27.33,    -- 27.33% for each 3★
+        }
+        local rarityCounts = {
+            ["5"] = 1,
+            ["4"] = 1, -- each 4★ slot gets 8%, not split
+            ["3"] = 1, -- each 3★ slot gets 27.33%, not split
+        }
+        local charsFrame = summonFrame and summonFrame:FindFirstChild("Chars")
+        if not charsFrame then
+            warn("[SummonUI] Chars frame não encontrado.")
+            return
+        end
+        print("[SummonUI] Frames dentro de Chars:")
+        for _, unitFrame in ipairs(charsFrame:GetChildren()) do
+            if unitFrame:IsA("Frame") then
+                print("  Frame:", unitFrame.Name)
+                for _, child in ipairs(unitFrame:GetChildren()) do
+                    print("    Child:", child.Name, child.ClassName)
+                end
+            end
+        end
+
+        if not playerGui then
+            warn("[SummonUI] PlayerGui não encontrado.")
+            return
+        end
+        bannerJson = playerGui:GetAttribute("CurrentBanner")
+        print("[SummonUI] CurrentBanner attribute:", bannerJson)
+        if not bannerJson then
+            warn("[SummonUI] CurrentBanner não encontrado em PlayerGui. Mostrando ícones padrão.")
+            -- Show default/fallback icons and print for each
+            for _, unitFrame in ipairs(charsFrame:GetChildren()) do
+                if unitFrame:IsA("Frame") then
+                    local icon = unitFrame:FindFirstChild("Icon")
+                    if icon and icon:IsA("ImageButton") then
+                        icon.Image = "rbxassetid://0" -- fallback asset
+                        print(string.format("[SummonUI] Fallback icon set for %s", unitFrame.Name))
+                    else
+                        print(string.format("[SummonUI] Fallback icon NOT set for %s (icon missing or wrong type)", unitFrame.Name))
+                    end
+                end
+            end
+            -- Show loading message
+            local loadingLabel = summonFrame:FindFirstChild("LoadingLabel")
+            if loadingLabel and loadingLabel:IsA("TextLabel") then
+                loadingLabel.Visible = true
+                loadingLabel.Text = "Carregando banner..."
+                print("[SummonUI] LoadingLabel shown: Carregando banner...")
+            end
+            -- Retry until banner arrives
+            if BannerUpdated then
+                BannerUpdated:FireServer() -- Request banner update
+            end
+            delay(0.3, function()
+                updateBannerIcons()
+            end)
+            return
+        end
+        local HttpService = game:GetService("HttpService")
+        local banner = nil
+        local ok, decoded = pcall(function() return HttpService:JSONDecode(bannerJson) end)
+        if ok and decoded and decoded.entries then
+            banner = decoded
+            print("[SummonUI] Banner entries:", HttpService:JSONEncode(banner.entries))
+        else
+            warn("[SummonUI] Falha ao decodificar CurrentBanner.")
+            return
+        end
+        -- Map frames: handle single-slot (e.g., 5_Star) and multi-slot (e.g., 3_Star1, 3_Star2)
+        local frameMap = {}
+        for _, unitFrame in ipairs(charsFrame:GetChildren()) do
+            if unitFrame:IsA("Frame") then
+                local name = unitFrame.Name
+                local rarity, idx = string.match(name, "^(%d+)_Star(%d+)$")
+                if rarity and idx then
+                    frameMap[rarity] = frameMap[rarity] or {}
+                    frameMap[rarity][tonumber(idx)] = unitFrame
+                    print(string.format("[SummonUI] Mapeado frame %s para rarity %s idx %d", name, rarity, tonumber(idx)))
+                else
+                    -- Handle single-slot rarity (e.g., 5_Star)
+                    local singleRarity = string.match(name, "^(%d+)_Star$")
+                    if singleRarity then
+                        frameMap[singleRarity] = frameMap[singleRarity] or {}
+                        frameMap[singleRarity][1] = unitFrame
+                        print(string.format("[SummonUI] Mapeado frame %s para rarity %s idx 1", name, singleRarity))
+                    end
+                end
+            end
+        end
+
+        -- For each entry, find the correct frame and set the icon
+        local raritySeen = {}
+        for _, entry in ipairs(banner.entries) do
+            local rarity = tostring(entry.rarity)
+            raritySeen[rarity] = (raritySeen[rarity] or 0) + 1
+            local idx = raritySeen[rarity]
+            local unitFrame = frameMap[rarity] and frameMap[rarity][idx]
+            print(string.format("[SummonUI] Procurando frame para rarity %s idx %d", rarity, idx))
+            if unitFrame then
+                print(string.format("[SummonUI][BannerIcons] Children of %s:", unitFrame.Name))
+                for _, child in ipairs(unitFrame:GetChildren()) do
+                    print("    Child:", child.Name, child.ClassName)
+                end
+                local icon = unitFrame:FindFirstChild("Icon")
+                print(string.format("[SummonUI] Frame %s, Icon: %s, Icon Type: %s, entry.icon_id: %s", unitFrame.Name, icon and icon.Name or "nil", icon and icon.ClassName or "nil", entry.icon_id or "nil"))
+                if icon then
+                    if icon:IsA("ImageButton") then
+                        if entry.icon_id then
+                            icon.Image = entry.icon_id
+                            print(string.format("[SummonUI] Frame %s: Ícone de %s atualizado para %s", unitFrame.Name, entry.id, entry.icon_id))
+                        else
+                            icon.Image = "rbxassetid://0"
+                            warn(string.format("[SummonUI] Frame %s: Não encontrado icon_id para: %s", unitFrame.Name, entry.id))
+                        end
+                        icon.MouseButton1Click:Connect(function()
+                            print(string.format("[SummonUI] [DEBUG] Click detectado em %s (icon=%s)", unitFrame.Name, icon.Image))
+                            openPreview(icon.Image, entry.rarity)
+                        end)
+                        print(string.format("[SummonUI] Evento de click conectado para %s", unitFrame.Name))
+                    else
+                        warn(string.format("[SummonUI] Frame %s: Icon existe mas não é ImageButton (tipo: %s)", unitFrame.Name, icon.ClassName))
+                    end
+                else
+                    warn(string.format("[SummonUI] Frame %s: Icon não encontrado", unitFrame.Name))
+                end
+                -- Display chance in a TextLabel if present
+                local chanceLabel = unitFrame:FindFirstChild("ChanceLabel")
+                if chanceLabel and chanceLabel:IsA("TextLabel") then
+                    local totalChance = rarityChances[rarity] or 0
+                    local count = rarityCounts[rarity] or 1
+                    local charChance = totalChance / count
+                    chanceLabel.Text = string.format("Chance: %.2f%%", charChance)
+                    chanceLabel.Visible = true
+                    print(string.format("[SummonUI] Frame %s: Chance set to %.2f%%", unitFrame.Name, charChance))
+                end
+            else
+                warn(string.format("[SummonUI] Não encontrado frame para rarity %s idx %d", rarity, idx))
+            end
+        end
+    end
+
+    -- Always call updateBannerIcons, even if banner is missing (it will show fallback)
+    updateBannerIcons()
+    local playerGui = player:FindFirstChild("PlayerGui")
+    if not (playerGui and playerGui:GetAttribute("CurrentBanner")) then
+        print("[SummonUI] CurrentBanner missing, requesting banner update from server...")
+        if BannerUpdated then
+            BannerUpdated:FireServer() -- Request banner update
+        end
+        local loadingLabel = summonFrame:FindFirstChild("LoadingLabel")
+        if loadingLabel and loadingLabel:IsA("TextLabel") then
+            loadingLabel.Visible = true
+            loadingLabel.Text = "Carregando banner..."
+        end
+        -- Retry icon update after short delay
+        delay(0.5, function()
+            updateBannerIcons()
+        end)
+    end
+
+    -- Tween para deslizar de cima para a posição normal
+    local tweenInfo = TweenInfo.new(0.5, Enum.EasingStyle.Quad, Enum.EasingDirection.Out)
+    local goal = {
+        Position = UDim2.new(0, 0, 0, 0) -- Posição final (ajuste conforme layout)
+    }
+    local tween = TweenService:Create(frame, tweenInfo, goal)
+    tween:Play()
+end
+
+-- Opcional: função para fechar a UI e resetar a flag com animação de saída
+local function closeSummonUI()
+    if not isSummonUIOpen then return end
+    print("[SummonUI] Iniciando animação de saída...")
+    -- Hide preview frame if open
+    if hidePreview then hidePreview() end
+    local tweenInfo = TweenInfo.new(0.5, Enum.EasingStyle.Quad, Enum.EasingDirection.In)
+    local goal = {
+        Position = UDim2.new(0, 0, -1, 0) -- Move para cima, fora da tela
+    }
+    local tween = TweenService:Create(frame, tweenInfo, goal)
+    tween:Play()
+    tween.Completed:Connect(function()
+        frame.Visible = false
+        isSummonUIOpen = false -- Reset flag ao fechar
+        print("[SummonUI] UI de Summon fechada!")
+    end)
+end
+
+-- Escuta o RemoteEvent do servidor
+print("[SummonUI] LocalScript rodando em:", tostring(script.Parent))
+print("[SummonUI] openRemote:", openRemote, "Type:", typeof(openRemote))
+print("[SummonUI] player:", player, "Name:", player and player.Name)
+
+-- Função para sinalizar pronto em intervalos até receber o evento
+local function keepSignalingReady()
+    while not receivedSummonEvent do
+        SummonClientReadyRE:FireServer()
+        print("[SummonUI] Cliente sinalizou pronto para Summon ao servidor (intervalo).")
+        wait(0.5)
+    end
+end
+
+-- Inicia o handshake em paralelo
+spawn(keepSignalingReady)
+
+openRemote.OnClientEvent:Connect(function(payload)
+    print("[SummonUI] RemoteEvent recebido! Payload:", payload, "openRemote:", openRemote, "player:", player)
+    receivedSummonEvent = true -- Para o handshake
+    if payload == "Summon" then
+        openSummonUI()
+    else
+        print("[SummonUI] Payload inesperado:", payload)
+    end
+end)
+
+-- Sinaliza ao servidor que o cliente está pronto para receber o evento de Summon
+SummonClientReadyRE:FireServer()
+print("[SummonUI] Cliente sinalizou pronto para Summon ao servidor.")
+
+-- Registra handler OnClientInvoke para abrir a UI e retornar confirmação ao servidor
+openSummonFunction.OnClientInvoke = function(payload)
+    print("[SummonUI] RemoteFunction OnClientInvoke chamado! Payload:", payload)
+    if payload == "Summon" then
+        openSummonUI()
+        print("[SummonUI] UI aberta via RemoteFunction!")
+        return true
+    end
+    return false
+end
+
+-- Conecta o botão de exit para fechar a UI
+local summonFrame = frame:FindFirstChild("Summon")
+if summonFrame then
+    local exitBtn = summonFrame:FindFirstChild("exit")
+    if exitBtn and exitBtn:IsA("ImageButton") or exitBtn:IsA("TextButton") then
+        exitBtn.MouseButton1Click:Connect(function()
+            print("[SummonUI] Botão exit clicado, fechando UI.")
+            closeSummonUI()
+        end)
+    else
+        warn("[SummonUI] Botão exit não encontrado ou não é um botão.")
+    end
+else
+    warn("[SummonUI] Frame.Summon não encontrado.")
+end
