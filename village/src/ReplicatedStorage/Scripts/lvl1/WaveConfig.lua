@@ -37,10 +37,10 @@ WaveConfig.Burst = {
 WaveConfig.SpawnAreas = {
     {
         corners = {
-            Vector3.new(43.331, 42.877, -77.222),
-            Vector3.new(43.15,  42.877,  5.278),
-            Vector3.new(125.649,42.877,  5.96),
-            Vector3.new(124.832,42.877, -77.542),
+            Vector3.new(51, 42.877, -69),
+            Vector3.new(51, 42.877, -3),
+            Vector3.new(117, 42.877, -3),
+            Vector3.new(117, 42.877, -69),
         },
         Y = 42.877, -- força altura constante (caso raycast não ajuste)
     }

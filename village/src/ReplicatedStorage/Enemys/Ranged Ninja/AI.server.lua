@@ -342,7 +342,7 @@ task.spawn(function()
 					origin = origin,
 					direction = dir,
 					speed = PROJECTILE_SPEED,
-					lifetime = 3,
+				lifetime = 5,
 					pierce = PIERCE,
 					damage = PROJECTILE_DAMAGE,
 					owner = enemyModel,

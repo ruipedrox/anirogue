@@ -6,8 +6,8 @@ KrillinStats.stars = 3
 KrillinStats.icon = 102208659147364
 -- Base passive stats (copied from Goku_3 for parity as pedido)
 KrillinStats.Passives = {
-    BaseDamage = 28,
-    Health = 280,
+    BaseDamage = 50,
+    Health = 500,
 }
 
 return KrillinStats

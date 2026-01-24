@@ -106,8 +106,9 @@ function Electric.Apply(opts)
 	
 	-- ALWAYS apply electric damage to the initial target first
 	local originHumanoid = originModel:FindFirstChildOfClass("Humanoid")
-	if originHumanoid and originHumanoid.Health > 0 then
+	if originHumanoid then
 		local electricDamage = baseDamage * damagePercent
+		print("[Electric] Applying", electricDamage, "to origin", originModel.Name, "| baseDmg:", baseDamage, "| percent:", damagePercent, "| health:", originHumanoid.Health)
 		originHumanoid:TakeDamage(electricDamage)
 		
 		-- Show damage number on initial target
@@ -116,6 +117,8 @@ function Electric.Apply(opts)
 			amount = electricDamage,
 			damageType = "electric"
 		})
+	else
+		print("[Electric] SKIP origin - no humanoid found in", originModel.Name)
 	end
 	
 	-- If chainCount > 0, proceed with chain lightning to nearby enemies

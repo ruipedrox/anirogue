@@ -4,11 +4,10 @@ local KameStats = {}
 KameStats.name = "Turtle Master"
 KameStats.stars = 4
 KameStats.icon = 93720933756204
--- Base passive stats (balanced similar to Alien Warrior 4-star, tweakable)
+-- Base passive stats - XP boost character com vida decente
 KameStats.Passives = {
-    -- Substituição: Em vez de dano base, este personagem dá +5 ao MaxLevel inicial e +50% XP.
-    xpgainrate = 1.5,  -- 50% mais XP ganho
-    Health = 520,      -- mantém vida ligeiramente acima da média 4★
+    xpgainrate = 2.0,  -- 100% mais XP ganho (upgrade do 1.5)
+    Health = 1000,     -- Vida 4★ padrão (grande upgrade)
 }
 
 return KameStats

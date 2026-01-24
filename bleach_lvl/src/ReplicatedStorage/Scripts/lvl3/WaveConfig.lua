@@ -1,14 +1,20 @@
 -- WaveConfig.lua (lvl3) - BLEACH LEVEL 3
--- Hardest tier: Las Noches - Final challenge with Ulquiorra boss
--- Earlier burst, bigger increments, most enemies
+-- Las Noches - HARDEST difficulty
+-- Boss: Aizen Sosuke (Final Boss of Bleach story)
 
 local WaveConfig = {}
+
+-- XP same as Village for consistent progression
+WaveConfig.CharacterXP = {
+    BasePerWave = 100,
+    GrowthPerWave = 25,
+}
 
 WaveConfig.Rates = {
     GoldPerWavePercent = 0.04,
     XPPerWavePercent   = 0.08,
-    HealthPerWavePercent = 0.10, -- reduced from 0.15
-    DamagePerWavePercent = 0.09, -- reduced from 0.12
+    HealthPerWavePercent = 0.10,
+    DamagePerWavePercent = 0.09,
 }
 
 WaveConfig.Burst = {
@@ -20,16 +26,16 @@ WaveConfig.Burst = {
 WaveConfig.SpawnAreas = {
     {
         corners = {
-            Vector3.new(43.331, 42.877, -77.222),
-            Vector3.new(43.15,  42.877,  5.278),
-            Vector3.new(125.649,42.877,  5.96),
-            Vector3.new(124.832,42.877, -77.542),
+            Vector3.new(-59, 10.73, 32),
+            Vector3.new(5, 10.73, 32),
+            Vector3.new(5, 10.23, -32),
+            Vector3.new(-59, 10.23, -32),
         },
-        Y = 42.877,
+        Y = 10.5,
     }
 }
 
--- Bleach themed waves - HARDEST difficulty with maximum Reapers
+-- 15 waves - Las Noches MAXIMUM difficulty
 WaveConfig.Waves = {
     { enemies = { { id = "meele_Reaper", count = 5 }, { id = "ranged_Reaper", count = 3 }, { id = "regen_reaper", count = 1 } } }, -- 1
     { enemies = { { id = "meele_Reaper", count = 6 }, { id = "ranged_Reaper", count = 3 }, { id = "regen_reaper", count = 2 } } }, -- 2
@@ -45,7 +51,7 @@ WaveConfig.Waves = {
     { enemies = { { id = "meele_Reaper", count = 18 }, { id = "ranged_Reaper", count = 9 }, { id = "regen_reaper", count = 7 } } }, -- 12
     { enemies = { { id = "meele_Reaper", count = 19 }, { id = "ranged_Reaper", count = 10 }, { id = "regen_reaper", count = 7 } } }, -- 13
     { enemies = { { id = "meele_Reaper", count = 20 }, { id = "ranged_Reaper", count = 11 }, { id = "regen_reaper", count = 8 } } }, -- 14
-    { enemies = { { id = "Aizen", count = 1, position = Vector3.new(84.5, 42.877, -35.882) } } }, -- 15 (FINAL BOSS: Aizen - Lord of Las Noches)
+    { enemies = { { id = "Aizen", count = 1, position = Vector3.new(-26.95, 10.5, -0.174) } } }, -- 15 (FINAL BOSS: Aizen)
 }
 
 return WaveConfig

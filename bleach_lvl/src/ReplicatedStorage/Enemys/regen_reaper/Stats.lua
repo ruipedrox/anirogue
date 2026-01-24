@@ -1,13 +1,13 @@
 local RegenReaperStats = {}
 
 -- Base stats for Regen Reaper (Bleach enemy with regeneration - Third Story Map)
--- TESTING: Increased health to test regeneration properly
-RegenReaperStats.Health = 1500     -- TEST: Very high health to survive and show regen
-RegenReaperStats.MoveSpeed = 13    -- movement speed (slowest of all)
-RegenReaperStats.WalkSpeed = 13    -- kept for compatibility
-RegenReaperStats.Damage = 24       -- melee damage (lower than meele but still strong)
-RegenReaperStats.XPDrop = 20       -- xp awarded when killed (same as Village)
+-- Tank unit with moderate health regen - requires focus fire to kill
+RegenReaperStats.Health = 350      -- High health tank (almost 2x Meele Reaper)
+RegenReaperStats.MoveSpeed = 14    -- slower than other reapers
+RegenReaperStats.WalkSpeed = 14    -- kept for compatibility
+RegenReaperStats.Damage = 12       -- lower damage than Meele Reaper
+RegenReaperStats.XPDrop = 25       -- bonus XP for harder enemy (25% more)
 RegenReaperStats.GoldDrop = 0      -- unused (rewards at end-of-run)
-RegenReaperStats.HealthRegen = 200 -- HP regen per second (EXTREME - requires DOT/heal reduction to counter!)
+RegenReaperStats.HealthRegen = 8   -- 8 HP/sec regen (requires focus to kill)
 
 return RegenReaperStats

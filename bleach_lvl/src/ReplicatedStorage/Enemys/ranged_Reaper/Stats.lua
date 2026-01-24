@@ -1,14 +1,14 @@
 -- Ranged Reaper base stats (Bleach enemy - fires energy balls - Third Story Map)
--- High damage ranged threat for late game
+-- Balanced for 3rd map: harder than Ranged Ninja but similar XP
 return {
-	Health = 320,
-	MoveSpeed = 15,
-	Damage = 20,
-	XPDrop = 18,
+	Health = 200,              -- 1.33x of Ranged Ninja (150 HP)
+	MoveSpeed = 16,            -- same as Ranged Ninja
+	Damage = 12,               -- slightly higher than Ranged Ninja (9 dmg)
+	XPDrop = 18,               -- same as Village for consistent progression
 	GoldDrop = 0,
-	AttackInterval = 0.6, -- Fast attack speed (2 animations system)
-	AttackRange = 85,
+	AttackInterval = 1.0,      -- slightly faster than Ranged Ninja (1.15s)
+	AttackRange = 90,
 	ProjectileSpeed = 100,
-	ProjectileDamage = 35, -- High projectile damage
+	ProjectileDamage = 18,     -- higher than Ranged Ninja (13 dmg)
 	Pierce = 1,
 }

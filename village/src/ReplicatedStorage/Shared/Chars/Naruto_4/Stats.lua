@@ -4,11 +4,10 @@ local NarutoStats = {}
 NarutoStats.name = "Fox Boy" -- renamed from Naruto for copyright-safe display
 NarutoStats.stars = 4
 NarutoStats.icon = 84864578966081
--- Base passive stats the character grants
+-- Base passive stats - MAJOR upgrade from 3★
 NarutoStats.Passives = {
-	-- Adjust as needed
-	BaseDamage = 65,
-	Health = 650,
+	BaseDamage = 90,   -- Grande upgrade do 3★ (5 dmg era muito fraco)
+	Health = 900,      -- Grande upgrade do 3★ (100 HP era muito fraco)
 }
 
 return NarutoStats

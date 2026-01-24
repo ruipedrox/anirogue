@@ -1,16 +1,16 @@
 -- WaveConfig.lua - BLEACH LEVEL 1
--- First Bleach map - Soul Society entrance
--- External editable configuration for wave spawning.
+-- Soul Society Entrance - First Bleach map (3rd story map overall)
+-- Boss: Kenpachi Zaraki
 
 local WaveConfig = {}
 
--- Character XP per wave (server uses this to grant XP each time a wave is cleared)
+-- Character XP per wave (kept similar to Village map for consistent progression)
 WaveConfig.CharacterXP = {
-    BasePerWave = 120,
-    GrowthPerWave = 30,
+    BasePerWave = 100,  -- Same as Village lvl1
+    GrowthPerWave = 25, -- Same as Village lvl1
 }
 
--- Global scaling rates (percent per wave AFTER the first).
+-- Global scaling rates (harder than Village)
 WaveConfig.Rates = {
     GoldPerWavePercent = 0.02,   -- +2% gold per wave
     XPPerWavePercent   = 0.05,   -- +5% XP per wave
@@ -20,49 +20,41 @@ WaveConfig.Rates = {
 
 -- Burst spawning
 WaveConfig.Burst = {
-    StartWave = 6, -- começa bursts na wave 6
-    Min = 3,       -- mínimo por ciclo
-    Max = 6,       -- máximo por ciclo
+    StartWave = 5, -- começa bursts na wave 5
+    Min = 3,
+    Max = 6,
 }
 
--- OPTIONAL: Define a rectangular spawn area override (example)
--- WaveConfig.SpawnAreas = {
---     { p1 = Vector3.new(-50, 10, -50), p2 = Vector3.new(50, 10, 50) },
--- }
-
--- Spawn aleatório dentro da arena (4 cantos fornecidos). Se não houver coordenadas por entry,
--- o WaveManager vai usar esta área.
+-- Spawn area
 WaveConfig.SpawnAreas = {
     {
         corners = {
-            Vector3.new(-66.95, 10.73, 40.326),
-            Vector3.new(13.05, 10.73, 40.326),
-            Vector3.new(13.05, 10.23, -40.674),
-            Vector3.new(-66.95, 10.23, -40.674),
+            Vector3.new(-59, 10.73, 32),
+            Vector3.new(5, 10.73, 32),
+            Vector3.new(5, 10.23, -32),
+            Vector3.new(-59, 10.23, -32),
         },
-        Y = 10.5, -- força altura constante (caso raycast não ajuste)
+        Y = 10.5,
     }
 }
 
--- TEST CONFIGURATION - Aizen for testing
--- Wave 1: Aizen boss in center
-
+-- 15 waves - Soul Society Entrance difficulty
 WaveConfig.Waves = {
-    { enemies = { 
-        { id = "Aizen", count = 1, position = Vector3.new(-26.95, 10.5, -0.174) } -- Aizen boss test
-    } }, -- Wave 1 TEST
+    { enemies = { { id = "meele_Reaper", count = 3 } } }, -- Wave 1
+    { enemies = { { id = "meele_Reaper", count = 4 } } }, -- Wave 2
+    { enemies = { { id = "meele_Reaper", count = 5 }, { id = "ranged_Reaper", count = 1 } } }, -- Wave 3
+    { enemies = { { id = "meele_Reaper", count = 6 }, { id = "ranged_Reaper", count = 2 } } }, -- Wave 4
+    { enemies = { { id = "meele_Reaper", count = 7 }, { id = "ranged_Reaper", count = 2 } } }, -- Wave 5
+    { enemies = { { id = "meele_Reaper", count = 8 }, { id = "ranged_Reaper", count = 3 } } }, -- Wave 6
+    { enemies = { { id = "meele_Reaper", count = 9 }, { id = "ranged_Reaper", count = 3 }, { id = "regen_reaper", count = 1 } } }, -- Wave 7
+    { enemies = { { id = "meele_Reaper", count = 10 }, { id = "ranged_Reaper", count = 4 }, { id = "regen_reaper", count = 1 } } }, -- Wave 8
+    { enemies = { { id = "meele_Reaper", count = 11 }, { id = "ranged_Reaper", count = 4 }, { id = "regen_reaper", count = 2 } } }, -- Wave 9
+    { enemies = { { id = "meele_Reaper", count = 12 }, { id = "ranged_Reaper", count = 5 }, { id = "regen_reaper", count = 2 } } }, -- Wave 10
+    { enemies = { { id = "meele_Reaper", count = 13 }, { id = "ranged_Reaper", count = 5 }, { id = "regen_reaper", count = 2 } } }, -- Wave 11
+    { enemies = { { id = "meele_Reaper", count = 14 }, { id = "ranged_Reaper", count = 6 }, { id = "regen_reaper", count = 3 } } }, -- Wave 12
+    { enemies = { { id = "meele_Reaper", count = 15 }, { id = "ranged_Reaper", count = 6 }, { id = "regen_reaper", count = 3 } } }, -- Wave 13
+    { enemies = { { id = "meele_Reaper", count = 16 }, { id = "ranged_Reaper", count = 7 }, { id = "regen_reaper", count = 4 } } }, -- Wave 14
+    { enemies = { { id = "Kenpachi", count = 1, position = Vector3.new(-26.95, 10.5, -0.174) } } }, -- Wave 15 (Boss: Kenpachi)
 }
-
---[[
--- Guardado aqui para referência: waves originais 6-15
--- Basta copiar de volta para dentro de WaveConfig.Waves se quiser reativar.
---    { enemies = { { id = "Melee Ninja", count = 10 }, { id = "Ranged Ninja", count = 3 } } }, -- Wave6
---    { enemies = { { id = "Melee Ninja", count = 11 }, { id = "Ranged Ninja", count = 4 } } }, -- Wave7
---    { enemies = { { id = "Melee Ninja", count = 12 }, { id = "Ranged Ninja", count = 5 } } }, -- Wave8
-BLEACH BOSS REFERENCE:
-- Kenpachi: Melee powerhouse (lvl 1)
-- Aizen: Strategic boss with illusions (lvl 2)
-- Ulquiorra: Ranged/melee hybrid with regeneration (lvl 3)
-]]
 
 return WaveConfig

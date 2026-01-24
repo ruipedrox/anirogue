@@ -13,7 +13,9 @@ NÂO ESQUECER:
 -verificar os drops de cada lvl, se está direito ou n
 
 FEATURES POR IMPLEMENTAR:
--mapa de Namek(dragon ball)
+-por codigos de recompensas(tipo o astd)
+-mapa de Namek(dragon ball) em progresso
+-modo infinito(importante)
 -missões semanais/diarias e 1 time achivements
 -evolutions(os items/ui e personagens estão feitos falta só o código da mecanica mesmo)
 -sound effects
