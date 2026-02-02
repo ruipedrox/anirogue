@@ -12,17 +12,47 @@ local def = {
 	Description = "Unlock Bankai transformation. Greatly increases damage and attack speed."
 }
 
--- Stats per level
+-- Stats per level (as percent bonuses)
 local statsPerLevel = {
-	[1] = { damageBoost = 0.30, attackSpeedBoost = 0.20, critDamage = 0.25 },
-	[2] = { damageBoost = 0.45, attackSpeedBoost = 0.30, critDamage = 0.50 },
-	[3] = { damageBoost = 0.60, attackSpeedBoost = 0.40, critDamage = 0.75 },
-	[4] = { damageBoost = 0.75, attackSpeedBoost = 0.50, critDamage = 1.00 },
-	[5] = { damageBoost = 1.00, attackSpeedBoost = 0.60, critDamage = 1.25 }
+	[1] = { damagePercent = 30, attackSpeedPercent = 20, critDamagePercent = 25 },
+	[2] = { damagePercent = 45, attackSpeedPercent = 30, critDamagePercent = 50 },
+	[3] = { damagePercent = 60, attackSpeedPercent = 40, critDamagePercent = 75 },
+	[4] = { damagePercent = 75, attackSpeedPercent = 50, critDamagePercent = 100 },
+	[5] = { damagePercent = 100, attackSpeedPercent = 60, critDamagePercent = 125 }
 }
 
 -- Track active Bankai per player
 local ActiveBankaiByUserId = {}
+
+local function addUpgrade(player, name, delta)
+	if type(delta) ~= "number" or delta == 0 then return end
+	local upgrades = player:FindFirstChild("Upgrades")
+	if not upgrades then
+		upgrades = Instance.new("Folder")
+		upgrades.Name = "Upgrades"
+		upgrades.Parent = player
+	end
+	local u = upgrades:FindFirstChild(name)
+	if not u then
+		u = Instance.new("NumberValue")
+		u.Name = name
+		u.Value = 0
+		u.Parent = upgrades
+	end
+	u.Value = u.Value + delta
+	-- Mirror to Stats
+	local stats = player:FindFirstChild("Stats")
+	if stats then
+		local s = stats:FindFirstChild(name)
+		if not s then
+			s = Instance.new("NumberValue")
+			s.Name = name
+			s.Value = 0
+			s.Parent = stats
+		end
+		s.Value = s.Value + delta
+	end
+end
 
 function def.OnCardAdded(player: Player, cardData, currentLevel: number)
 	local level = math.clamp(currentLevel or 1, 1, def.MaxLevel)
@@ -39,22 +69,28 @@ function def.OnCardAdded(player: Player, cardData, currentLevel: number)
 	end
 	ActiveBankaiByUserId[player.UserId].level = level
 	
-	-- Add stats to player
-	local damageBoost = player:GetAttribute("DamageBoost") or 0
-	local attackSpeedBoost = player:GetAttribute("AttackSpeedBoost") or 0
-	local critDamage = player:GetAttribute("CritDamage") or 0
-	
-	player:SetAttribute("DamageBoost", damageBoost + stats.damageBoost)
-	player:SetAttribute("AttackSpeedBoost", attackSpeedBoost + stats.attackSpeedBoost)
-	player:SetAttribute("CritDamage", critDamage + stats.critDamage)
+	-- Add stats to player using Upgrades
+	addUpgrade(player, "DamagePercent", stats.damagePercent)
+	addUpgrade(player, "AttackSpeedPercent", stats.attackSpeedPercent)
+	addUpgrade(player, "CritDamagePercent", stats.critDamagePercent)
 	
 	print(string.format("[Bankai] Player %s activated Bankai Lv%d: +%.0f%% damage, +%.0f%% attack speed, +%.0f%% crit damage",
 		player.Name,
 		level,
-		stats.damageBoost * 100,
-		stats.attackSpeedBoost * 100,
-		stats.critDamage * 100
+		stats.damagePercent,
+		stats.attackSpeedPercent,
+		stats.critDamagePercent
 	))
+	
+	-- Reapply stats
+	pcall(function()
+		local ApplyStats = require(ReplicatedStorage.Scripts.ApplyStats)
+		local EquippedItems = require(ReplicatedStorage.Scripts.EquipedItems)
+		local CharEquipped = require(ReplicatedStorage.Scripts.CharEquiped)
+		local items = EquippedItems:GetEquipped(player)
+		local chars = CharEquipped:GetEquipped(player)
+		ApplyStats:Apply(player, items, chars)
+	end)
 end
 
 function def.OnCardRemoved(player: Player, cardData)
@@ -66,13 +102,9 @@ function def.OnCardRemoved(player: Player, cardData)
 	
 	if stats then
 		-- Remove stats from player
-		local damageBoost = player:GetAttribute("DamageBoost") or 0
-		local attackSpeedBoost = player:GetAttribute("AttackSpeedBoost") or 0
-		local critDamage = player:GetAttribute("CritDamage") or 0
-		
-		player:SetAttribute("DamageBoost", math.max(0, damageBoost - stats.damageBoost))
-		player:SetAttribute("AttackSpeedBoost", math.max(0, attackSpeedBoost - stats.attackSpeedBoost))
-		player:SetAttribute("CritDamage", math.max(0, critDamage - stats.critDamage))
+		addUpgrade(player, "DamagePercent", -stats.damagePercent)
+		addUpgrade(player, "AttackSpeedPercent", -stats.attackSpeedPercent)
+		addUpgrade(player, "CritDamagePercent", -stats.critDamagePercent)
 	end
 	
 	-- Cleanup

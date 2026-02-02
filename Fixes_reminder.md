@@ -1,9 +1,5 @@
 BUGS POR CORRIGIR:
--corrigir lightning damage n afetar o inimigo acertado(está a apenas a afetar os que dá chain)
--progeteis de inimigos ficarem no mapa após o inimigo morrer(n está a ser feito o clean up)
--inimigo spawnar muito perto da borada e ir para fora do mapa
--getsuga tenshou e outras habilidades n darem dano(fix fácil)
--kameameha n está a mirar automatico
+-n dá cleanup no death beam do frieza
 
 NÂO ESQUECER:
 -Verificar se o DOT está a funcionar corretamente
@@ -14,13 +10,18 @@ NÂO ESQUECER:
 
 FEATURES POR IMPLEMENTAR:
 -por codigos de recompensas(tipo o astd)
--mapa de Namek(dragon ball) em progresso
+-mapa de Namek(dragon ball) fase final
 -modo infinito(importante)
 -missões semanais/diarias e 1 time achivements
 -evolutions(os items/ui e personagens estão feitos falta só o código da mecanica mesmo)
 -sound effects
 
 FUTURAS FEATURES:
--catalogo com todos os personagens(rewards por cada novo desbloqueado)
+-leaderboard e leaderboard rewards
+
+-catalogo com todos os personagens(rewards por cada novo char desbloqueado)
 -items colecionaveis(cosmeticos)
 -6 Star Chars
+-com a adição de 6 star um novo banner
+-mapas do story (one piece, jujutso, etc)
+-modos de jogo especiais

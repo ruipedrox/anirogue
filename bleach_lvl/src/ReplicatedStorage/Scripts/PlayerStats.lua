@@ -5,7 +5,7 @@ pcall(function()
 	CharacterTiers = require(ReplicatedStorage.Scripts:WaitForChild("CharacterTiers"))
 end)
 
-function PlayerStatsModule:Calculate(equipment, chars)
+function PlayerStatsModule:Calculate(player, equipment, chars)
 	local finalStats = {}
 
 	-- Stats base do jogador
@@ -77,6 +77,33 @@ function PlayerStatsModule:Calculate(equipment, chars)
 					end
 					toAdd = scaled
 				end
+				
+				-- Apply Serious Training multipliers to Saitama's base stats
+				-- This happens BEFORE summing, so equipment/other cards apply on top
+				local isSaitama = char.Name and (char.Name:find("Saitama") or char.id and char.id:find("Saitama"))
+				if isSaitama and player then
+					local dmgMult = player:GetAttribute("SaitamaDamageMult")
+					local hpMult = player:GetAttribute("SaitamaHealthMult")
+					
+					if dmgMult or hpMult then
+						local scaled = {}
+						for k, v in pairs(toAdd) do
+							if type(v) == "number" then
+								if (k == "BaseDamage" or k == "Damage") and dmgMult then
+									scaled[k] = v * dmgMult
+								elseif k == "Health" and hpMult then
+									scaled[k] = v * hpMult
+								else
+									scaled[k] = v
+								end
+							else
+								scaled[k] = v
+							end
+						end
+						toAdd = scaled
+					end
+				end
+				
 				addStats(toAdd)
 			end
 		end

@@ -327,21 +327,7 @@ local function startLoopForPlayer(player: Player)
                 local dealt = baseDamage * dmgMult * mult
                 
                 -- Apply damage with crit info for damage numbers
-                local finalDmg = Damage.Apply(hum, dealt)
-                
-                -- Show damage number with crit
-                if finalDmg > 0 then
-                    local DamageNumbers = require(ScriptsFolder:WaitForChild("Combat"):WaitForChild("DamageNumbers"))
-                    local pos = getEnemyPosition(enemy)
-                    if pos then
-                        DamageNumbers.Show({
-                            position = pos,
-                            amount = finalDmg,
-                            damageType = critCount > 0 and "crit" or "normal",
-                            critCount = critCount
-                        })
-                    end
-                end
+                local finalDmg = Damage.Apply(hum, dealt, { critCount = critCount })
                 
                 -- Apply Electric chain lightning if player has electric stacks
                 local Electric = require(ScriptsFolder:WaitForChild("Combat"):WaitForChild("Electric"))

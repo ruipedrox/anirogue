@@ -1,17 +1,23 @@
--- Melee Ninja AI: simple contact damage within 1 stud
--- This script should be cloned along with the enemy model and run server-side.
+-- Melee Alien AI: basic contact damage enemy
 
 local Players = game:GetService("Players")
 local ReplicatedStorage = game:GetService("ReplicatedStorage")
 local CollectionService = game:GetService("CollectionService")
 
-local RANGE = 3 -- increased to expand enemy engagement range
+local RANGE = 3
 local COOLDOWN = 0.5
 local DEFAULT_DAMAGE = 10
 
 local enemyModel = script.Parent
 local humanoid = enemyModel:FindFirstChildOfClass("Humanoid") or enemyModel:WaitForChild("Humanoid", 2)
 local root = enemyModel.PrimaryPart or enemyModel:FindFirstChild("HumanoidRootPart") or (enemyModel:WaitForChild("HumanoidRootPart", 2))
+
+if not root then return end
+
+-- Enable AutoRotate for proper movement
+if humanoid then
+	humanoid.AutoRotate = true
+end
 
 -- Load attack animation only
 local attackTrack
@@ -173,6 +179,73 @@ end)
 task.spawn(function()
 	-- Two loops: one for movement/chase (less frequent), and one for contact damage (more frequent)
 	-- Movement loop
+	while running do
+		if ReplicatedStorage:GetAttribute("GamePaused") then
+			applyPauseState(true)
+			task.wait(0.05)
+			continue
+		else
+			applyPauseState(false)
+		end
+		
+		-- Determine desired move speed from attributes/stats
+		local moveSpeed = enemyModel:GetAttribute("MoveSpeed")
+		if typeof(moveSpeed) ~= "number" or moveSpeed <= 0 then
+			-- Fallback to BASE_STATS or default
+			if BASE_STATS and typeof(BASE_STATS.MoveSpeed) == "number" then
+				moveSpeed = BASE_STATS.MoveSpeed
+			else
+				moveSpeed = 16
+			end
+		end
+		if humanoid then humanoid.WalkSpeed = moveSpeed end
+		
+		-- Find nearest alive player to chase
+		local bestPlr, bestDist, bestPos
+		for _, plr in ipairs(Players:GetPlayers()) do
+			local char = plr.Character
+			local phum = char and char:FindFirstChildOfClass("Humanoid")
+			local proot = char and char:FindFirstChild("HumanoidRootPart")
+			if proot and phum and phum.Health > 0 then
+				local d = (proot.Position - root.Position).Magnitude
+				if not bestDist or d < bestDist then
+					bestDist = d
+					bestPlr = plr
+					bestPos = proot.Position
+				end
+			end
+		end
+		
+		if bestPos and humanoid then
+			-- Separation steering from nearby enemies to reduce clumping
+			local sep = Vector3.zero
+			local processed = 0
+			for _, other in ipairs(CollectionService:GetTagged("Enemy")) do
+				if other ~= enemyModel and other.Parent then
+					local oroot = other.PrimaryPart or other:FindFirstChild("HumanoidRootPart")
+					if oroot then
+						local delta = root.Position - oroot.Position
+						local dist = delta.Magnitude
+						if dist > 0.001 and dist < SEPARATION_RADIUS then
+							local push = (SEPARATION_RADIUS - dist) / SEPARATION_RADIUS
+							sep += (delta.Unit * push)
+							processed += 1
+							if processed >= 10 then break end -- cap cost
+						end
+					end
+				end
+			end
+			if sep.Magnitude > 0 then
+				sep = sep.Unit * SEPARATION_FORCE
+			end
+			
+			-- Target a position around the player instead of exact center
+			local desired = bestPos + formationOffset + sep
+			humanoid:MoveTo(desired)
+		end
+		
+		task.wait(0.25) -- update path/target 4x per second
+	end
 end)
 
 task.spawn(function()
@@ -267,10 +340,12 @@ task.spawn(function()
 					end
 					local last = lastHitTimes[plr] or 0
 					if now - last >= COOLDOWN then
-						lastHitTimes[plr] = now					-- Play attack animation
-					if attackTrack and not attackTrack.IsPlaying then
-						attackTrack:Play()
-					end						phum:TakeDamage(dmg)
+						lastHitTimes[plr] = now
+						-- Play attack animation
+						if attackTrack and not attackTrack.IsPlaying then
+							attackTrack:Play()
+						end
+						phum:TakeDamage(dmg)
 						-- Apply invulnerability frames
 						local invs = getInvTimeSeconds(plr)
 						if invs > 0 then

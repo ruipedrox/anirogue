@@ -48,7 +48,8 @@ local function applyMitigation(model, amount)
 	return amount
 end
 
-function Damage.Apply(humanoid: Humanoid, amount: number)
+function Damage.Apply(humanoid: Humanoid, amount: number, opts)
+	opts = opts or {}
 	if not humanoid or humanoid.Health <= 0 then return 0 end
 	local character = humanoid.Parent
 	if character and CollectionService:HasTag(character, "ShadowClone") then
@@ -62,6 +63,19 @@ function Damage.Apply(humanoid: Humanoid, amount: number)
 	amount = applyMitigation(model, amount)
 	if amount <= 0 then return 0 end
 	humanoid:TakeDamage(amount)
+	
+	-- Show damage number
+	if model then
+		local hrp = model:FindFirstChild("HumanoidRootPart") or model.PrimaryPart
+		if hrp and hrp:IsA("BasePart") then
+			DamageNumbers.Show({
+				position = hrp.Position,
+				amount = amount,
+				damageType = opts.critCount and opts.critCount > 0 and "crit" or (opts.damageType or "normal"),
+				critCount = opts.critCount
+			})
+		end
+	end
 
 	-- Instrumentation: record damage dealt by the 'creator' if present
 	local ok, creator = pcall(function() return humanoid:FindFirstChild("creator") end)

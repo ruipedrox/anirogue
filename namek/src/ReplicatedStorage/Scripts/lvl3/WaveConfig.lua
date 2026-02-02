@@ -1,6 +1,6 @@
 -- WaveConfig.lua (lvl3) - GREEN PLANET LEVEL 3
 -- Namek Stronghold - HARDEST difficulty
--- Boss: Aizen (Final Boss of Green Planet story)
+-- Boss: Super Buu (Final Boss of Green Planet story)
 
 local WaveConfig = {}
 
@@ -11,10 +11,10 @@ WaveConfig.CharacterXP = {
 }
 
 WaveConfig.Rates = {
-    GoldPerWavePercent = 0.04,
-    XPPerWavePercent   = 0.08,
-    HealthPerWavePercent = 0.10,
-    DamagePerWavePercent = 0.09,
+    GoldPerWavePercent = 0.045,   -- +4.5% gold per wave
+    XPPerWavePercent   = 0.085,   -- +8.5% XP per wave
+    HealthPerWavePercent = 0.095, -- +9.5% Health per wave (Village=10%, Bleach=10%)
+    DamagePerWavePercent = 0.085, -- +8.5% Damage per wave (Village=9%, Bleach=9%)
 }
 
 WaveConfig.Burst = {
@@ -51,7 +51,7 @@ WaveConfig.Waves = {
     { enemies = { { id = "melee_alien", count = 18 }, { id = "ranged_alien", count = 9 }, { id = "cloner_alien", count = 7 } } }, -- 12
     { enemies = { { id = "melee_alien", count = 19 }, { id = "ranged_alien", count = 10 }, { id = "cloner_alien", count = 7 } } }, -- 13
     { enemies = { { id = "melee_alien", count = 20 }, { id = "ranged_alien", count = 11 }, { id = "cloner_alien", count = 8 } } }, -- 14
-    { enemies = { { id = "Aizen", count = 1, position = Vector3.new(-26.95, 10.5, -0.174) } } }, -- 15 (FINAL BOSS: Aizen)
+    { enemies = { { id = "SuperBuu", count = 1, position = Vector3.new(-27, 10.5, 0) } } }, -- 15 (FINAL BOSS: Super Buu - Centro do mapa)
 }
 
 return WaveConfig

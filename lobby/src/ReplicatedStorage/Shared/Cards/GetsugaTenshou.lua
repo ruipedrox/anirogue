@@ -149,15 +149,29 @@ local function fireGetsuga(player, level)
 		direction = Vector3.new(math.cos(randomAngle), 0, math.sin(randomAngle))
 	end
 	
-	-- Fire multiple projectiles in 360° pattern
-	for i = 1, stats.projectileCount do
-		-- Calculate angle for even distribution in 360°
-		local angleStep = math.rad(360 / stats.projectileCount)
-		local angle = angleStep * (i - 1)
-		
-		-- Apply rotation around Y axis
-		local spreadDir = CFrame.new(Vector3.zero, direction) * CFrame.Angles(0, angle, 0)
-		local finalDir = spreadDir.LookVector
+	-- Calculate directions based on projectile count and level logic
+	local directions = {}
+	
+	if stats.projectileCount == 1 then
+		-- Level 1-2: Single projectile aimed at enemy
+		table.insert(directions, direction)
+	elseif stats.projectileCount == 2 then
+		-- Level 3-4: Two projectiles - one at enemy, one opposite (180°)
+		table.insert(directions, direction)
+		table.insert(directions, -direction) -- Opposite direction
+	elseif stats.projectileCount == 3 then
+		-- Level 5: Three projectiles separated by 120° (360/3), one aimed at enemy
+		table.insert(directions, direction)
+		-- Rotate by 120° and 240° from base direction
+		local baseCF = CFrame.new(Vector3.zero, direction)
+		local dir2 = (baseCF * CFrame.Angles(0, math.rad(120), 0)).LookVector
+		local dir3 = (baseCF * CFrame.Angles(0, math.rad(240), 0)).LookVector
+		table.insert(directions, dir2)
+		table.insert(directions, dir3)
+	end
+	
+	-- Fire projectiles with calculated directions
+	for i, finalDir in ipairs(directions) do
 		
 		-- Get or create projectile model
 		local modelSource = getGetsugaModel()
@@ -167,18 +181,31 @@ local function fireGetsuga(player, level)
 			-- Clone the getsuga model and scale it
 			projectileModel = modelSource:Clone()
 			
-			-- Scale the model and ensure parts are configured for projectiles
+			-- Scale the model by stats.size
 			if projectileModel:IsA("Model") then
-				local primaryPart = projectileModel.PrimaryPart or projectileModel:FindFirstChildWhichIsA("BasePart")
-				if primaryPart then
-					-- Scale all parts in the model and configure for projectile use
-					for _, obj in ipairs(projectileModel:GetDescendants()) do
-						if obj:IsA("BasePart") then
-							obj.Size = obj.Size * stats.size
-							obj.Anchored = true
-							obj.CanCollide = false
-							obj.CanQuery = false
-							obj.CanTouch = false
+				local scaleFactor = stats.size
+				for _, obj in ipairs(projectileModel:GetDescendants()) do
+					if obj:IsA("BasePart") then
+						-- Scale size
+						obj.Size = obj.Size * scaleFactor
+						-- Scale position relative to PrimaryPart
+						if projectileModel.PrimaryPart and obj ~= projectileModel.PrimaryPart then
+							local offset = obj.Position - projectileModel.PrimaryPart.Position
+							obj.Position = projectileModel.PrimaryPart.Position + (offset * scaleFactor)
+						end
+						obj.Anchored = true
+						obj.CanCollide = false
+						obj.CanQuery = false
+						obj.CanTouch = false
+					elseif obj:IsA("ParticleEmitter") then
+						-- Scale particle effects
+						if obj.Size then
+							local sizeKeypoints = obj.Size.Keypoints
+							local newKeypoints = {}
+							for _, kp in ipairs(sizeKeypoints) do
+								table.insert(newKeypoints, NumberSequenceKeypoint.new(kp.Time, kp.Value * scaleFactor, kp.Envelope * scaleFactor))
+							end
+							obj.Size = NumberSequence.new(newKeypoints)
 						end
 					end
 				end

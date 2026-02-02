@@ -1,39 +1,51 @@
--- Melee Ninja AI: simple contact damage within 1 stud
--- This script should be cloned along with the enemy model and run server-side.
+-- Cloner Alien AI: melee enemy that spawns 3 clones on death
+-- Clones have different stat multipliers (70%, 110%, 150%) and cannot clone themselves
 
 local Players = game:GetService("Players")
 local ReplicatedStorage = game:GetService("ReplicatedStorage")
 local CollectionService = game:GetService("CollectionService")
 
-local RANGE = 3 -- increased to expand enemy engagement range
+local RANGE = 3
 local COOLDOWN = 0.5
 local DEFAULT_DAMAGE = 10
 
 local enemyModel = script.Parent
+
 local humanoid = enemyModel:FindFirstChildOfClass("Humanoid") or enemyModel:WaitForChild("Humanoid", 2)
+if not humanoid then return end
+
 local root = enemyModel.PrimaryPart or enemyModel:FindFirstChild("HumanoidRootPart") or (enemyModel:WaitForChild("HumanoidRootPart", 2))
+if not root then return end
+
+-- Load attack animation only
+local attackTrack
+local animFolder = enemyModel:FindFirstChild("Animation")
+if animFolder and humanoid then
+	local atkAnim = animFolder:FindFirstChild("Attack")
+	if atkAnim and atkAnim:IsA("Animation") then
+		attackTrack = humanoid:LoadAnimation(atkAnim)
+		attackTrack.Looped = false
+	end
+end
 
 -- Carrega apenas o Stats direto deste inimigo (sem fallback genérico)
 local BASE_STATS do
-    local statsModule = enemyModel:FindFirstChild("Stats")
-    if statsModule and statsModule:IsA("ModuleScript") then
-        local ok, data = pcall(require, statsModule)
-        if ok and type(data) == "table" then
-            BASE_STATS = data
-        end
-    end
+	local statsModule = enemyModel:FindFirstChild("Stats")
+	if statsModule and statsModule:IsA("ModuleScript") then
+		local ok, data = pcall(require, statsModule)
+		if ok and type(data) == "table" then
+			BASE_STATS = data
+		end
+	end
 end
+
 -- Anti-clump parameters
 local FORMATION_RADIUS_MIN = 2.5
 local FORMATION_RADIUS_MAX = 4.0
 local SEPARATION_RADIUS = 3.5
 local SEPARATION_FORCE = 2.0
 
--- (enemyModel/humanoid/root declarados acima)
-
-if not root then return end
-
-local lastHitTimes = setmetatable({}, { __mode = "k" }) -- key: Player -> last time
+local lastHitTimes = setmetatable({}, { __mode = "k" })
 
 -- Each enemy keeps its own formation offset around the player to avoid everyone stacking same point
 local angle = math.random() * math.pi * 2
@@ -46,10 +58,12 @@ end
 
 local cachedDamage
 local lastDamageCheck = 0
-local DAMAGE_REFRESH_INTERVAL = 1.0 -- seconds; allows wave scaling attributes to update mid-run if ever modified
+local DAMAGE_REFRESH_INTERVAL = 1.0
 
 local function computeBaseDamage()
-	-- Always derive from Stats.lua for base (BASE_STATS), fallback to stored BaseDamage attribute, then legacy Damage
+	-- Apply StatMultiplier if this is a clone
+	local statMult = enemyModel:GetAttribute("StatMultiplier") or 1
+
 	local base
 	if BASE_STATS and typeof(BASE_STATS.Damage) == "number" and BASE_STATS.Damage > 0 then
 		base = BASE_STATS.Damage
@@ -65,9 +79,13 @@ local function computeBaseDamage()
 		end
 	end
 	base = base or DEFAULT_DAMAGE
-	local mult = enemyModel:GetAttribute("DamageWaveMultiplier")
-	if typeof(mult) ~= "number" or mult <= 0 then mult = 1 end
-	return base * mult
+
+	-- Apply clone multiplier
+	base = base * statMult
+
+	local waveMult = enemyModel:GetAttribute("DamageWaveMultiplier")
+	if typeof(waveMult) ~= "number" or waveMult <= 0 then waveMult = 1 end
+	return base * waveMult
 end
 
 local function getDamage(now)
@@ -148,10 +166,61 @@ local function applyPauseState(paused)
 	end
 end
 
+-- Clone spawning on death (only if this is NOT already a clone)
+local function spawnClone(statMultiplier)
+	local clone = enemyModel:Clone()
+	clone:SetAttribute("IsClone", true)
+	clone:SetAttribute("StatMultiplier", statMultiplier)
+	clone:SetAttribute("IsEnemy", true)
+	clone:SetAttribute("EnemyId", "cloner_alien")
+
+	-- Reset health based on stat multiplier (clones inherit -345 health from dead original!)
+	local cloneHum = clone:FindFirstChildOfClass("Humanoid")
+	if cloneHum and BASE_STATS and BASE_STATS.Health then
+		local cloneMaxHealth = BASE_STATS.Health * statMultiplier
+		cloneHum.MaxHealth = cloneMaxHealth
+		cloneHum.Health = cloneMaxHealth
+	end
+
+	-- Position clone near original with random offset to prevent stacking
+	local offsetX = math.random(-5, 5)
+	local offsetZ = math.random(-5, 5)
+	local spawnPos = root.Position + Vector3.new(offsetX, 0, offsetZ)
+
+	-- Parent to workspace first
+	clone.Parent = workspace
+
+	-- Set position after parenting
+	local cloneRoot = clone.PrimaryPart or clone:FindFirstChild("HumanoidRootPart")
+	if cloneRoot then
+		clone:PivotTo(CFrame.new(spawnPos))
+	end
+
+	-- Tag as enemy so WaveManager can track it
+	CollectionService:AddTag(clone, "Enemy")
+end
+
 -- Stop when enemy dies or is removed
+local clonesSpawned = false
+local function trySpawnClones()
+	if clonesSpawned then return end
+	clonesSpawned = true
+	running = false
+
+	-- Spawn 3 clones only if this is the original (not a clone)
+	if not enemyModel:GetAttribute("IsClone") then
+		spawnClone(0.7)  -- 70% stats (126 HP)
+		spawnClone(1.1)  -- 110% stats (198 HP)
+		spawnClone(1.5)  -- 150% stats (270 HP)
+	end
+end
+
+-- Use HealthChanged instead of Died to spawn clones BEFORE cleanup code destroys the model
 if humanoid then
-	humanoid.Died:Connect(function()
-		running = false
+	humanoid.HealthChanged:Connect(function(health)
+		if health <= 0 and not clonesSpawned then
+			trySpawnClones()
+		end
 	end)
 end
 
@@ -160,11 +229,7 @@ enemyModel.AncestryChanged:Connect(function(_, parent)
 end)
 
 task.spawn(function()
-	-- Two loops: one for movement/chase (less frequent), and one for contact damage (more frequent)
 	-- Movement loop
-end)
-
-task.spawn(function()
 	while running do
 		if ReplicatedStorage:GetAttribute("GamePaused") then
 			applyPauseState(true)

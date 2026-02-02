@@ -1,17 +1,27 @@
--- Melee Ninja AI: simple contact damage within 1 stud
--- This script should be cloned along with the enemy model and run server-side.
+-- Melee Alien AI: basic contact damage enemy
 
 local Players = game:GetService("Players")
 local ReplicatedStorage = game:GetService("ReplicatedStorage")
 local CollectionService = game:GetService("CollectionService")
 
-local RANGE = 3 -- increased to expand enemy engagement range
+local RANGE = 3
 local COOLDOWN = 0.5
 local DEFAULT_DAMAGE = 10
 
 local enemyModel = script.Parent
 local humanoid = enemyModel:FindFirstChildOfClass("Humanoid") or enemyModel:WaitForChild("Humanoid", 2)
 local root = enemyModel.PrimaryPart or enemyModel:FindFirstChild("HumanoidRootPart") or (enemyModel:WaitForChild("HumanoidRootPart", 2))
+
+-- Load attack animation only
+local attackTrack
+local animFolder = enemyModel:FindFirstChild("Animation")
+if animFolder and humanoid then
+	local atkAnim = animFolder:FindFirstChild("Attack")
+	if atkAnim and atkAnim:IsA("Animation") then
+		attackTrack = humanoid:LoadAnimation(atkAnim)
+		attackTrack.Looped = false
+	end
+end
 
 -- Carrega apenas o Stats direto deste inimigo (sem fallback genérico)
 local BASE_STATS do
@@ -257,6 +267,10 @@ task.spawn(function()
 					local last = lastHitTimes[plr] or 0
 					if now - last >= COOLDOWN then
 						lastHitTimes[plr] = now
+						-- Play attack animation
+						if attackTrack and not attackTrack.IsPlaying then
+							attackTrack:Play()
+						end
 						phum:TakeDamage(dmg)
 						-- Apply invulnerability frames
 						local invs = getInvTimeSeconds(plr)

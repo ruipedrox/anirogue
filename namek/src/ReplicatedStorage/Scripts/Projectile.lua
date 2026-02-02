@@ -7,6 +7,7 @@
 local RunService = game:GetService("RunService")
 local Players = game:GetService("Players")
 local ReplicatedStorage = game:GetService("ReplicatedStorage")
+local CollectionService = game:GetService("CollectionService")
 
 local Projectile = {}
 local Damage = require(ReplicatedStorage:WaitForChild("Scripts"):WaitForChild("Combat"):WaitForChild("Damage"))
@@ -15,6 +16,8 @@ local Damage = require(ReplicatedStorage:WaitForChild("Scripts"):WaitForChild("C
 local OwnerProjectiles: {[Instance]: {ProjectileHandle}} = {}
 -- Track if owner already has death listener
 local OwnerListeners: {[Instance]: boolean} = {}
+-- Track if owner is dead (prevents new projectiles from being created)
+local DeadOwners: {[Instance]: boolean} = {}
 
 -- Helper: find the top-level model with a Humanoid for a hit part
 local function getHumanoidModelFromPart(part: BasePart?)
@@ -30,6 +33,18 @@ local function getHumanoidModelFromPart(part: BasePart?)
         node = node.Parent
     end
     return nil
+end
+
+-- Helper: check if a model is an enemy (has Enemy tag or IsEnemy attribute)
+local function isEnemy(model: Model?)
+    if not model then return false end
+    -- Check for Enemy tag (CollectionService)
+    if CollectionService:HasTag(model, "Enemy") then return true end
+    -- Check for IsEnemy attribute
+    if model:GetAttribute("IsEnemy") == true then return true end
+    -- Check for EnemyId attribute (another common marker)
+    if model:GetAttribute("EnemyId") then return true end
+    return false
 end
 
 local function findAnyBasePart(model: Instance): BasePart?
@@ -104,6 +119,14 @@ function Projectile.Fire(params: FireParams): ProjectileHandle
     assert(params and typeof(params.origin) == "Vector3", "Projectile.Fire: missing origin")
     assert(params and typeof(params.direction) == "Vector3", "Projectile.Fire: missing direction")
     assert(typeof(params.speed) == "number" and params.speed > 0, "Projectile.Fire: speed must be > 0")
+
+    -- Don't create projectile if owner is already marked as dead
+    if params.owner and DeadOwners[params.owner] then
+        return {
+            Instance = nil,
+            Destroy = function() end
+        }
+    end
 
     local direction = params.direction.Magnitude > 0 and params.direction.Unit or Vector3.new(0, 0, -1)
     local lifetime = typeof(params.lifetime) == "number" and params.lifetime or 2
@@ -301,57 +324,83 @@ function Projectile.Fire(params: FireParams): ProjectileHandle
         end
         table.insert(OwnerProjectiles[params.owner], handle)
         
-        -- Setup death listener once per owner
-        if not OwnerListeners[params.owner] then
+        -- Final check: if owner died during projectile creation, destroy immediately
+        if DeadOwners[params.owner] then
+            handle:Destroy()
+            return handle
+        end
+        
+        -- Determine owner model
+        local ownerModel: Model? = nil
+        if typeof(params.owner) == "Instance" then
+            if params.owner:IsA("Player") then
+                ownerModel = params.owner.Character
+            elseif params.owner:IsA("Model") then
+                ownerModel = params.owner
+            end
+        end
+        
+        -- Setup death listener - check if owner is alive and listener exists
+        local needsListener = false
+        if ownerModel then
+            local hum = ownerModel:FindFirstChildOfClass("Humanoid")
+            if hum and hum.Health > 0 then
+                -- Only setup listener if not already present OR if owner is a new instance
+                if not OwnerListeners[params.owner] then
+                    needsListener = true
+                end
+            end
+        end
+        
+        if needsListener and ownerModel then
             OwnerListeners[params.owner] = true
+            local hum = ownerModel:FindFirstChildOfClass("Humanoid")
             
-            local ownerModel: Model? = nil
-            if typeof(params.owner) == "Instance" then
-                if params.owner:IsA("Player") then
-                    ownerModel = params.owner.Character
-                elseif params.owner:IsA("Model") then
-                    ownerModel = params.owner
+            -- Cleanup function to destroy all projectiles from this owner
+            local cleanupProjectiles = function()
+                -- Mark owner as dead FIRST to prevent new projectiles
+                DeadOwners[params.owner] = true
+                
+                -- Destroy existing projectiles immediately (Heartbeat loop will catch them)
+                if OwnerProjectiles[params.owner] then
+                    local projectiles = table.clone(OwnerProjectiles[params.owner])
+                    for _, projectileHandle in ipairs(projectiles) do
+                        if projectileHandle and projectileHandle.Instance then
+                            projectileHandle:Destroy()
+                        end
+                    end
+                    OwnerProjectiles[params.owner] = nil
+                    OwnerListeners[params.owner] = nil
                 end
             end
             
-            if ownerModel then
-                local hum = ownerModel:FindFirstChildOfClass("Humanoid")
-                if hum then
-                    hum.Died:Connect(function()
-                        -- Destroy ALL projectiles from this owner
-                        if OwnerProjectiles[params.owner] then
-                            local projectiles = OwnerProjectiles[params.owner]
-                            for _, projectileHandle in ipairs(projectiles) do
-                                if projectileHandle and projectileHandle.Instance then
-                                    projectileHandle:Destroy()
-                                end
-                            end
-                            OwnerProjectiles[params.owner] = nil
-                            OwnerListeners[params.owner] = nil
-                        end
-                    end)
-                end
-                ownerModel.AncestryChanged:Connect(function(_, parent)
-                    if not parent then
-                        -- Owner removed from game, destroy all projectiles
-                        if OwnerProjectiles[params.owner] then
-                            local projectiles = OwnerProjectiles[params.owner]
-                            for _, projectileHandle in ipairs(projectiles) do
-                                if projectileHandle and projectileHandle.Instance then
-                                    projectileHandle:Destroy()
-                                end
-                            end
-                            OwnerProjectiles[params.owner] = nil
-                            OwnerListeners[params.owner] = nil
-                        end
+            -- Use HealthChanged instead of Died (Died fires too late, after cleanup destroys enemy)
+            if hum then
+                hum.HealthChanged:Connect(function(health)
+                    if health <= 0 then
+                        cleanupProjectiles()
                     end
                 end)
             end
+            
+            -- Also cleanup when owner is removed from workspace
+            ownerModel.AncestryChanged:Connect(function(_, parent)
+                if not parent then
+                    cleanupProjectiles()
+                end
+            end)
         end
     end
 
     connection = RunService.Heartbeat:Connect(function(dt)
         if not alive then return end
+        
+        -- Check if owner is dead and destroy immediately
+        if params.owner and DeadOwners[params.owner] then
+            handle:Destroy()
+            return
+        end
+        
         -- Always advance lifetime even while paused so projectiles clean up
         elapsed += dt
         if elapsed >= lifetime then
@@ -392,26 +441,33 @@ function Projectile.Fire(params: FireParams): ProjectileHandle
                             if m then enemyModel = m break end
                         end
                         if enemyModel then
-                            local now = os.clock()
-                            local cd = typeof(params.hitCooldownPerTarget) == "number" and params.hitCooldownPerTarget or 0.2
-                            local last = lastHitTimes[enemyModel]
-                            if (not last) or (now - last) >= cd then
-                                lastHitTimes[enemyModel] = now
-                                if damage > 0 then
-                                    local hum = enemyModel:FindFirstChildOfClass("Humanoid")
-                                    if hum then Damage.Apply(hum, damage) end
+                            -- Skip if owner is an enemy and target is also an enemy (enemies don't hit each other)
+                            local ownerIsEnemy = params.owner and (typeof(params.owner) == "Instance" and params.owner:IsA("Model")) and isEnemy(params.owner)
+                            local targetIsEnemy = isEnemy(enemyModel)
+                            if ownerIsEnemy and targetIsEnemy then
+                                -- Skip this hit, enemies don't damage each other
+                            else
+                                local now = os.clock()
+                                local cd = typeof(params.hitCooldownPerTarget) == "number" and params.hitCooldownPerTarget or 0.2
+                                local last = lastHitTimes[enemyModel]
+                                if (not last) or (now - last) >= cd then
+                                    lastHitTimes[enemyModel] = now
+                                    if damage > 0 then
+                                        local hum = enemyModel:FindFirstChildOfClass("Humanoid")
+                                        if hum then Damage.Apply(hum, damage) end
+                                    end
+                                    if params.onHit then
+                                        -- Use a dummy BasePart reference when using proximity
+                                        task.spawn(params.onHit, findAnyBasePart(enemyModel) :: BasePart, enemyModel)
+                                    end
+                                    pierce -= 1
+                                    if pierce <= 0 then
+                                        handle:Destroy()
+                                        return
+                                    end
+                                    hit = true
+                                    break
                                 end
-                                if params.onHit then
-                                    -- Use a dummy BasePart reference when using proximity
-                                    task.spawn(params.onHit, findAnyBasePart(enemyModel) :: BasePart, enemyModel)
-                                end
-                                pierce -= 1
-                                if pierce <= 0 then
-                                    handle:Destroy()
-                                    return
-                                end
-                                hit = true
-                                break
                             end
                         end
                     end
@@ -439,28 +495,36 @@ function Projectile.Fire(params: FireParams): ProjectileHandle
                 -- Process hit
                 local enemyModel = getHumanoidModelFromPart(result.Instance)
                 if enemyModel then
-                    local now = os.clock()
-                    local cd = typeof(params.hitCooldownPerTarget) == "number" and params.hitCooldownPerTarget or 0.2
-                    local last = lastHitTimes[enemyModel]
-                    if (not last) or (now - last) >= cd then
-                        lastHitTimes[enemyModel] = now
-                        -- Apply damage if requested (legacy)
-                        if damage > 0 then
-                            local hum = enemyModel:FindFirstChildOfClass("Humanoid")
-                            if hum then
-                                Damage.Apply(hum, damage)
+                    -- Skip if owner is an enemy and target is also an enemy (enemies don't hit each other)
+                    local ownerIsEnemy = params.owner and (typeof(params.owner) == "Instance" and params.owner:IsA("Model")) and isEnemy(params.owner)
+                    local targetIsEnemy = isEnemy(enemyModel)
+                    if ownerIsEnemy and targetIsEnemy then
+                        -- Skip this hit, enemies don't damage each other
+                        -- Continue moving the projectile
+                    else
+                        local now = os.clock()
+                        local cd = typeof(params.hitCooldownPerTarget) == "number" and params.hitCooldownPerTarget or 0.2
+                        local last = lastHitTimes[enemyModel]
+                        if (not last) or (now - last) >= cd then
+                            lastHitTimes[enemyModel] = now
+                            -- Apply damage if requested (legacy)
+                            if damage > 0 then
+                                local hum = enemyModel:FindFirstChildOfClass("Humanoid")
+                                if hum then
+                                    Damage.Apply(hum, damage)
+                                end
                             end
-                        end
-                        if params.onHit then
-                            task.spawn(params.onHit, result.Instance, enemyModel)
-                        end
-                        -- During arming window, do not decrement pierce on raycast to avoid instant consumption at spawn
-                        if elapsed > (((typeof(params.proximityDelay) == "number") and params.proximityDelay) or 0) then
-                            pierce -= 1
-                        end
-                        if pierce <= 0 then
-                            handle:Destroy()
-                            return
+                            if params.onHit then
+                                task.spawn(params.onHit, result.Instance, enemyModel)
+                            end
+                            -- During arming window, do not decrement pierce on raycast to avoid instant consumption at spawn
+                            if elapsed > (((typeof(params.proximityDelay) == "number") and params.proximityDelay) or 0) then
+                                pierce -= 1
+                            end
+                            if pierce <= 0 then
+                                handle:Destroy()
+                                return
+                            end
                         end
                     end
                 end

@@ -12,17 +12,47 @@ local def = {
 	Description = "The legendary dojutsu of the Uchiha clan. Increases critical hit chance and critical damage. Above 100% crit chance, gain additional crit multipliers.\n\nLv1: +5% crit chance, +50% crit damage\nLv2: +10% crit chance, +75% crit damage\nLv3: +15% crit chance, +100% crit damage\nLv4: +20% crit chance, +125% crit damage\nLv5: +25% crit chance, +150% crit damage"
 }
 
--- Crit stats per level
+-- Crit stats per level (as percent bonuses)
 local critStatsPerLevel = {
-	[1] = { critChance = 0.05, critDamage = 0.50 },
-	[2] = { critChance = 0.10, critDamage = 0.75 },
-	[3] = { critChance = 0.15, critDamage = 1.00 },
-	[4] = { critChance = 0.20, critDamage = 1.25 },
-	[5] = { critChance = 0.25, critDamage = 1.50 }
+	[1] = { critChancePercent = 5, critDamagePercent = 50 },
+	[2] = { critChancePercent = 10, critDamagePercent = 75 },
+	[3] = { critChancePercent = 15, critDamagePercent = 100 },
+	[4] = { critChancePercent = 20, critDamagePercent = 125 },
+	[5] = { critChancePercent = 25, critDamagePercent = 150 }
 }
 
 -- Track active Sharingan per player
 local ActiveSharinganByUserId = {}
+
+local function addUpgrade(player, name, delta)
+	if type(delta) ~= "number" or delta == 0 then return end
+	local upgrades = player:FindFirstChild("Upgrades")
+	if not upgrades then
+		upgrades = Instance.new("Folder")
+		upgrades.Name = "Upgrades"
+		upgrades.Parent = player
+	end
+	local u = upgrades:FindFirstChild(name)
+	if not u then
+		u = Instance.new("NumberValue")
+		u.Name = name
+		u.Value = 0
+		u.Parent = upgrades
+	end
+	u.Value = u.Value + delta
+	-- Mirror to Stats
+	local stats = player:FindFirstChild("Stats")
+	if stats then
+		local s = stats:FindFirstChild(name)
+		if not s then
+			s = Instance.new("NumberValue")
+			s.Name = name
+			s.Value = 0
+			s.Parent = stats
+		end
+		s.Value = s.Value + delta
+	end
+end
 
 function def.OnCardAdded(player: Player, cardData, currentLevel: number)
 	local level = math.clamp(currentLevel or 1, 1, def.MaxLevel)
@@ -39,19 +69,26 @@ function def.OnCardAdded(player: Player, cardData, currentLevel: number)
 	end
 	ActiveSharinganByUserId[player.UserId].level = level
 	
-	-- Add crit stats to player
-	local critChance = player:GetAttribute("CritChance") or 0
-	local critDamage = player:GetAttribute("CritDamage") or 0
-	
-	player:SetAttribute("CritChance", critChance + stats.critChance)
-	player:SetAttribute("CritDamage", critDamage + stats.critDamage)
+	-- Add crit stats using Upgrades
+	addUpgrade(player, "CritChancePercent", stats.critChancePercent)
+	addUpgrade(player, "CritDamagePercent", stats.critDamagePercent)
 	
 	print(string.format("[Sharingan] Player %s activated Sharingan Lv%d: %.0f%% crit chance, %.0f%% crit damage",
 		player.Name,
 		level,
-		stats.critChance * 100,
-		stats.critDamage * 100
+		stats.critChancePercent,
+		stats.critDamagePercent
 	))
+	
+	-- Reapply stats
+	pcall(function()
+		local ApplyStats = require(ReplicatedStorage.Scripts.ApplyStats)
+		local EquippedItems = require(ReplicatedStorage.Scripts.EquipedItems)
+		local CharEquipped = require(ReplicatedStorage.Scripts.CharEquiped)
+		local items = EquippedItems:GetEquipped(player)
+		local chars = CharEquipped:GetEquipped(player)
+		ApplyStats:Apply(player, items, chars)
+	end)
 end
 
 function def.OnCardRemoved(player: Player, cardData)
@@ -62,12 +99,9 @@ function def.OnCardRemoved(player: Player, cardData)
 	local stats = critStatsPerLevel[level]
 	
 	if stats then
-		-- Remove crit stats from player
-		local critChance = player:GetAttribute("CritChance") or 0
-		local critDamage = player:GetAttribute("CritDamage") or 0
-		
-		player:SetAttribute("CritChance", math.max(0, critChance - stats.critChance))
-		player:SetAttribute("CritDamage", math.max(0, critDamage - stats.critDamage))
+		-- Remove crit stats
+		addUpgrade(player, "CritChancePercent", -stats.critChancePercent)
+		addUpgrade(player, "CritDamagePercent", -stats.critDamagePercent)
 	end
 	
 	-- Cleanup

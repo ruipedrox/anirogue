@@ -183,6 +183,26 @@ local function getEnemiesTouching(beam: Instance)
 	return enemies
 end
 
+local function findNearestEnemy(fromPos: Vector3): Model?
+	local enemies = CollectionService:GetTagged("Enemy")
+	local nearest: Model? = nil
+	local minDist = math.huge
+	for _, m in ipairs(enemies) do
+		if m:IsA("Model") then
+			local hrp = m:FindFirstChild("HumanoidRootPart") or m.PrimaryPart
+			local hum = m:FindFirstChildOfClass("Humanoid")
+			if hrp and hum and hum.Health > 0 then
+				local dist = (hrp.Position - fromPos).Magnitude
+				if dist < minDist then
+					minDist = dist
+					nearest = m
+				end
+			end
+		end
+	end
+	return nearest
+end
+
 function M.Start(player: Player)
 	if running[player] then return end
 	local conn
@@ -262,9 +282,22 @@ function M.Start(player: Player)
 		beam.Parent = character
 		-- Make non-colliding, anchored
 		makeNonBlockingAnchored(beam)
+		-- Find nearest enemy and calculate aim direction
+		local nearestEnemy = findNearestEnemy(hrp.Position)
+		local aimDirection: Vector3
+		if nearestEnemy then
+			local enemyHrp = nearestEnemy:FindFirstChild("HumanoidRootPart") or nearestEnemy.PrimaryPart
+			if enemyHrp then
+				aimDirection = (enemyHrp.Position - hrp.Position).Unit
+			else
+				aimDirection = hrp.CFrame.LookVector
+			end
+		else
+			aimDirection = hrp.CFrame.LookVector
+		end
 		-- Coloca inicialmente para poder medir bounding box já orientado
 		positionInFront(beam, hrp, FORWARD_OFFSET_BEAM)
-		local look = hrp.CFrame.LookVector
+		local look = aimDirection
 		-- Medir tamanho base (scale 1) uma única vez e armazenar no template
 		local baseForwardSize: number = beamTemplate:GetAttribute("BaseForwardSize")
 		local backFaceDist: number = beamTemplate:GetAttribute("BackFaceDistance")
@@ -302,16 +335,33 @@ function M.Start(player: Player)
 		-- Novo offset para colocar o pivot mais à frente = backFaceDist + currentForwardSize/2
 		local desiredForwardDistance = backFaceDist + currentForwardSize / 2 -- distância positiva em studs para frente do HRP até o pivot
 		local dynamicForwardOffset = -desiredForwardDistance -- negativo porque usamos CFrame.new(0,0,negativo)
-		positionInFront(beam, hrp, dynamicForwardOffset)
-		local beamFollowConn = startFollow(beam, hrp, dynamicForwardOffset)
+		-- Position beam: rotate around player HRP to aim at target
+		local aimCFrame = CFrame.lookAt(hrp.Position, hrp.Position + aimDirection)
 		if beam:IsA("Model") then
 			local primary = beam.PrimaryPart or beam:FindFirstChild("HumanoidRootPart")
 			if primary then
-				primary.CFrame = hrp.CFrame * CFrame.new(0, 0, dynamicForwardOffset) * CFrame.Angles(ROTATE_X, 0, 0)
+				primary.CFrame = aimCFrame * CFrame.new(0, 0, dynamicForwardOffset) * CFrame.Angles(ROTATE_X, 0, 0)
 			end
 		elseif beam:IsA("BasePart") then
-			beam.CFrame = hrp.CFrame * CFrame.new(0, 0, dynamicForwardOffset) * CFrame.Angles(ROTATE_X, 0, 0)
+			beam.CFrame = aimCFrame * CFrame.new(0, 0, dynamicForwardOffset) * CFrame.Angles(ROTATE_X, 0, 0)
 		end
+		-- Update follow connection to use aim direction
+		local beamFollowConn
+		beamFollowConn = RunService.Heartbeat:Connect(function()
+			if not beam.Parent or not hrp.Parent then
+				if beamFollowConn then beamFollowConn:Disconnect() end
+				return
+			end
+			local currentAimCFrame = CFrame.lookAt(hrp.Position, hrp.Position + aimDirection)
+			if beam:IsA("Model") then
+				local primary = beam.PrimaryPart or beam:FindFirstChild("HumanoidRootPart")
+				if primary then
+					primary.CFrame = currentAimCFrame * CFrame.new(0, 0, dynamicForwardOffset) * CFrame.Angles(ROTATE_X, 0, 0)
+				end
+			elseif beam:IsA("BasePart") then
+				beam.CFrame = currentAimCFrame * CFrame.new(0, 0, dynamicForwardOffset) * CFrame.Angles(ROTATE_X, 0, 0)
+			end
+		end)
 
 		-- Damage ticks during duration
 		local elapsed = 0

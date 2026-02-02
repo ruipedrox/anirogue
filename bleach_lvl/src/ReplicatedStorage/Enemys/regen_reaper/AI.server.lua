@@ -13,6 +13,17 @@ local enemyModel = script.Parent
 local humanoid = enemyModel:FindFirstChildOfClass("Humanoid") or enemyModel:WaitForChild("Humanoid", 2)
 local root = enemyModel.PrimaryPart or enemyModel:FindFirstChild("HumanoidRootPart") or (enemyModel:WaitForChild("HumanoidRootPart", 2))
 
+-- Load attack animation only
+local attackTrack
+local animFolder = enemyModel:FindFirstChild("Animation")
+if animFolder and humanoid then
+	local atkAnim = animFolder:FindFirstChild("Attack")
+	if atkAnim and atkAnim:IsA("Animation") then
+		attackTrack = humanoid:LoadAnimation(atkAnim)
+		attackTrack.Looped = false
+	end
+end
+
 -- Carrega apenas o Stats direto deste inimigo (sem fallback genérico)
 local BASE_STATS do
     local statsModule = enemyModel:FindFirstChild("Stats")
@@ -256,8 +267,10 @@ task.spawn(function()
 					end
 					local last = lastHitTimes[plr] or 0
 					if now - last >= COOLDOWN then
-						lastHitTimes[plr] = now
-						phum:TakeDamage(dmg)
+						lastHitTimes[plr] = now					-- Play attack animation
+					if attackTrack and not attackTrack.IsPlaying then
+						attackTrack:Play()
+					end						phum:TakeDamage(dmg)
 						-- Apply invulnerability frames
 						local invs = getInvTimeSeconds(plr)
 						if invs > 0 then

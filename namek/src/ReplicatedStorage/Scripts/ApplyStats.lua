@@ -6,7 +6,7 @@ local ApplyStatsModule = {}
 -- chars: {FireMageEffects, IceWarriorEffects, ...}
 function ApplyStatsModule:Apply(player, equipment, chars)
 	-- Calcula stats finais (ainda sem aplicar scaling de nível de personagem)
-	local finalStats = PlayerStatsModule:Calculate(equipment, chars)
+	local finalStats = PlayerStatsModule:Calculate(player, equipment, chars)
 
 	--[[
 	CHARACTER LEVEL SCALING

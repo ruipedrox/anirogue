@@ -1,6 +1,6 @@
 -- WaveConfig.lua (lvl2) - GREEN PLANET LEVEL 2
 -- Namek Village - Medium difficulty
--- Boss: Ulquiorra
+-- Boss: Cell
 
 local WaveConfig = {}
 
@@ -11,10 +11,10 @@ WaveConfig.CharacterXP = {
 }
 
 WaveConfig.Rates = {
-    GoldPerWavePercent = 0.03,
-    XPPerWavePercent   = 0.06,
-    HealthPerWavePercent = 0.08,
-    DamagePerWavePercent = 0.07,
+    GoldPerWavePercent = 0.035,   -- +3.5% gold per wave
+    XPPerWavePercent   = 0.065,   -- +6.5% XP per wave
+    HealthPerWavePercent = 0.075, -- +7.5% Health per wave (Village=8%, Bleach=8%)
+    DamagePerWavePercent = 0.065, -- +6.5% Damage per wave (Village=7%, Bleach=7%)
 }
 
 WaveConfig.Burst = {
@@ -51,7 +51,7 @@ WaveConfig.Waves = {
     { enemies = { { id = "melee_alien", count = 15 }, { id = "ranged_alien", count = 7 }, { id = "cloner_alien", count = 5 } } }, -- 12
     { enemies = { { id = "melee_alien", count = 16 }, { id = "ranged_alien", count = 8 }, { id = "cloner_alien", count = 5 } } }, -- 13
     { enemies = { { id = "melee_alien", count = 17 }, { id = "ranged_alien", count = 8 }, { id = "cloner_alien", count = 6 } } }, -- 14
-    { enemies = { { id = "Ulquiorra", count = 1, position = Vector3.new(-26.95, 10.5, -0.174) } } }, -- 15 (Boss: Ulquiorra)
+    { enemies = { { id = "Cell", count = 1, position = Vector3.new(-27, 10.5, 0) } } }, -- 15 (Boss: Cell - Centro do mapa)
 }
 
 return WaveConfig
