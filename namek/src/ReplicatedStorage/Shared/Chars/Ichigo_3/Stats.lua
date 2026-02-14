@@ -10,4 +10,7 @@ IchigoStats.Passives = {
 	Health = 140,
 }
 
+-- XP dado quando consumido no Feed (3 = 5000)
+IchigoStats.FeedXP = 5000
+
 return IchigoStats

@@ -10,4 +10,7 @@ KrillinStats.Passives = {
     Health = 500,
 }
 
+-- XP dado quando consumido no Feed (3 = 5000)
+KrillinStats.FeedXP = 5000
+
 return KrillinStats

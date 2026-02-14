@@ -6,8 +6,8 @@ M.Id = "Green_Planet"
 M.DisplayName = "Green Planet"
 M.SortOrder = 2
 M.PlaceId = 0 -- replace with the actual gameplay place id for Green Planet
-M.PreviewImage = "rbxassetid://0"
-M.BackgroundImage = "rbxassetid://0"
+M.PreviewImage = "rbxassetid://125509760649958"
+M.BackgroundImage = "rbxassetid://125509760649958"
 M.Levels = {
     { Level = 1, BossImage = "rbxassetid://0", WaveKey = "green_planet_l1" },
     { Level = 2, BossImage = "rbxassetid://0", WaveKey = "green_planet_l2" },

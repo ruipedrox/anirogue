@@ -150,8 +150,13 @@ local function buildPoolsFromCatalog()
     local all = CharacterCatalog:GetAllMap()
     for template, entry in pairs(all) do
         local stars = tonumber(entry.stars) or tonumber(entry.stars) or 0
-        if stars >=1 and stars <=6 then
-            table.insert(pools[stars], template)
+        -- Skip units explicitly marked as not allowed in banners
+        if entry and entry.allow_in_banner == false then
+            -- skip
+        else
+            if stars >=1 and stars <=6 then
+                table.insert(pools[stars], template)
+            end
         end
     end
     return pools

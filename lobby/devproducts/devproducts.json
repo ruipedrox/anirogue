@@ -1,0 +1,91 @@
+[
+  {
+    "sku": "gems_25",
+    "type": "gems",
+    "price_robux": 25,
+    "amount": 100,
+    "name": "Gems Pack - 100",
+    "description": "100 Gems - Budget pack"
+  },
+  {
+    "sku": "gems_100",
+    "type": "gems",
+    "price_robux": 100,
+    "amount": 500,
+    "name": "Gems Pack - 500",
+    "description": "500 Gems"
+  },
+  {
+    "sku": "gems_200",
+    "type": "gems",
+    "price_robux": 200,
+    "amount": 1250,
+    "name": "Gems Pack - 1,250",
+    "description": "1,250 Gems"
+  },
+  {
+    "sku": "gems_400",
+    "type": "gems",
+    "price_robux": 400,
+    "amount": 3000,
+    "name": "Gems Pack - 3,000",
+    "description": "3,000 Gems"
+  },
+  {
+    "sku": "gems_800",
+    "type": "gems",
+    "price_robux": 800,
+    "amount": 7000,
+    "name": "Gems Pack - 7,000",
+    "description": "7,000 Gems"
+  },
+  {
+    "sku": "gems_1600",
+    "type": "gems",
+    "price_robux": 1600,
+    "amount": 15000,
+    "name": "Gems Pack - 15,000",
+    "description": "15,000 Gems"
+  },
+
+  {
+    "sku": "gold_100",
+    "type": "gold",
+    "price_robux": 100,
+    "amount": 10000,
+    "name": "Gold Pack - 10,000",
+    "description": "10,000 Gold"
+  },
+  {
+    "sku": "gold_200",
+    "type": "gold",
+    "price_robux": 200,
+    "amount": 25000,
+    "name": "Gold Pack - 25,000",
+    "description": "25,000 Gold"
+  },
+  {
+    "sku": "gold_400",
+    "type": "gold",
+    "price_robux": 400,
+    "amount": 70000,
+    "name": "Gold Pack - 70,000",
+    "description": "70,000 Gold"
+  },
+  {
+    "sku": "gold_800",
+    "type": "gold",
+    "price_robux": 800,
+    "amount": 200000,
+    "name": "Gold Pack - 200,000",
+    "description": "200,000 Gold"
+  },
+  {
+    "sku": "gold_1600",
+    "type": "gold",
+    "price_robux": 1600,
+    "amount": 500000,
+    "name": "Gold Pack - 500,000",
+    "description": "500,000 Gold"
+  }
+]

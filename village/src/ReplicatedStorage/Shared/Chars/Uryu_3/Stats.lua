@@ -9,4 +9,7 @@ UryuStats.Passives = {
 	Health = 180,
 }
 
+-- XP dado quando consumido no Feed (3 = 5000)
+UryuStats.FeedXP = 5000
+
 return UryuStats

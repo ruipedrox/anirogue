@@ -35,19 +35,7 @@ local clientReady = {} -- map<userId, boolean>
 
 print(string.format("[UpgradeBlock] Remotes: Open_Upgrade=%s OpenUpgradeFunction=%s", tostring(openRemote and openRemote:GetFullName()), tostring(openUpgradeFunction and openUpgradeFunction:GetFullName())))
 
-local function findTouchable(base)
-    if not base then return nil end
-    if base:IsA("BasePart") then return base end
-    for _, d in ipairs(base:GetDescendants()) do
-        if d:IsA("BasePart") then return d end
-    end
-    return nil
-end
-
-local part = findTouchable(script.Parent)
-if not part then
-    warn("[UpgradeBlock] Nenhuma BasePart encontrada para conectar Touched (parent=", script.Parent and script.Parent:GetFullName(), ")")
-end
+local part = script.Parent
 local debounce = {}
 local DEBOUNCE_SECONDS = 0.8
 
@@ -68,7 +56,7 @@ local function playerFromHit(hit)
     return Players:GetPlayerFromCharacter(char)
 end
 
-if part and part.Touched then part.Touched:Connect(function(hit)
+part.Touched:Connect(function(hit)
     local player = playerFromHit(hit)
     print("[UpgradeBlock] playerFromHit:", player, player and player.Name)
     if not player then return end
@@ -116,4 +104,4 @@ if part and part.Touched then part.Touched:Connect(function(hit)
     else
         warn("RemoteFunction OpenUpgradeFunction não encontrado em ReplicatedStorage.Remotes")
     end
-end end)
+end)

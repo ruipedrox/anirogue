@@ -10,4 +10,7 @@ IchigoStats.Passives = {
 	Health = 700,      -- 5x do 3★ (140) - LOW HP (glass cannon)
 }
 
+-- XP dado quando consumido no Feed (5 = 50000)
+IchigoStats.FeedXP = 50000
+
 return IchigoStats

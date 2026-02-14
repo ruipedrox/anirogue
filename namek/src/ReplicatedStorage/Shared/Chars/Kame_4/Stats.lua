@@ -10,4 +10,7 @@ KameStats.Passives = {
     Health = 1000,     -- Vida 4★ padrão (grande upgrade)
 }
 
+-- XP dado quando consumido no Feed (4 = 15000)
+KameStats.FeedXP = 15000
+
 return KameStats

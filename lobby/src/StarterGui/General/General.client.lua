@@ -10,6 +10,9 @@ local generalRoot = script.Parent
 local leftGui = generalRoot:WaitForChild("Left_gui")
 local btnChars = leftGui:WaitForChild("Chars")
 local btnEquip = leftGui:FindFirstChild("Equip") or leftGui:WaitForChild("Equip")
+local btnCodes = leftGui:FindFirstChild("Codes") or leftGui:WaitForChild("Codes")
+local btnMissions = leftGui:FindFirstChild("Missions") or leftGui:WaitForChild("Missions")
+local btnInv = leftGui:FindFirstChild("Inv") or leftGui:FindFirstChild("Inv", true)
 
 -- Referências a contadores de moedas/gemas (estrutura mostrada na imagem)
 local botGui = generalRoot:FindFirstChild("Bot_gui") or generalRoot:WaitForChild("Bot_gui")
@@ -96,6 +99,24 @@ local function findIconLabel(slot)
 		end
 	end
 	return nil
+end
+
+-- Helper: fecha as UIs Codes e Missions (usado para evitar que permaneçam abertas)
+local function closeCodesAndMissions()
+	local names = {"Codes", "Missions"}
+	for _, nm in ipairs(names) do
+		local g = playerGui:FindFirstChild(nm) or playerGui:FindFirstChild(nm, true)
+		if g then
+			for _, d in ipairs(g:GetDescendants()) do
+				if d:IsA("LocalScript") then
+					pcall(function()
+						d:SetAttribute("Hide", true)
+						d:SetAttribute("Show", false)
+					end)
+				end
+			end
+		end
+	end
 end
 
 local function applyEquippedSlots(characters)
@@ -453,13 +474,28 @@ local function toggleChars()
 		localScript:SetAttribute("Show", false)
 		print("[GeneralUI] Fechando Chars")
 	else
-		-- Fechar Equip se estiver aberto
+			-- Fechar Equip se estiver aberto
 		local equipGui = playerGui:FindFirstChild("Equip")
 		if equipGui then
 			for _, ls in ipairs(equipGui:GetChildren()) do
 				if ls:IsA("LocalScript") then
 					ls:SetAttribute("Hide", true)
 					ls:SetAttribute("Show", false)
+				end
+			end
+		end
+			-- Close Codes/Missions to avoid them staying open
+			closeCodesAndMissions()
+
+		-- Close Inv if it's open so only one panel remains visible
+		local invGui = playerGui:FindFirstChild("Inv") or playerGui:FindFirstChild("Inv", true)
+		if invGui then
+			for _, ls in ipairs(invGui:GetDescendants()) do
+				if ls:IsA("LocalScript") then
+					pcall(function()
+						ls:SetAttribute("Hide", true)
+						ls:SetAttribute("Show", false)
+					end)
 				end
 			end
 		end
@@ -516,6 +552,21 @@ local function toggleEquip()
 				end
 			end
 		end
+			-- Close Codes/Missions to avoid them staying open
+			closeCodesAndMissions()
+
+		-- Close Inv if it's open so only one panel remains visible
+		local invGui = playerGui:FindFirstChild("Inv") or playerGui:FindFirstChild("Inv", true)
+		if invGui then
+			for _, ls in ipairs(invGui:GetDescendants()) do
+				if ls:IsA("LocalScript") then
+					pcall(function()
+						ls:SetAttribute("Hide", true)
+						ls:SetAttribute("Show", false)
+					end)
+				end
+			end
+		end
 		scriptLS:SetAttribute("Show", true)
 		scriptLS:SetAttribute("Hide", false)
 		print("[GeneralUI] Abrindo Equip (atributos definidos)")
@@ -524,6 +575,169 @@ end
 
 if btnEquip and btnEquip:IsA("ImageButton") then
 	btnEquip.MouseButton1Click:Connect(toggleEquip)
+end
+
+-- Left buttons: Codes / Missions / Inv helpers (moved from LocalScript)
+local function getCodesGui()
+	return playerGui:FindFirstChild("Codes") or playerGui:FindFirstChild("Codes", true)
+end
+
+local function getMissionsGui()
+	return playerGui:FindFirstChild("Missions") or playerGui:FindFirstChild("Missions", true)
+end
+
+local function closeAllPanels(nameToKeep)
+	local panels = {"Codes","Missions","Chars","Equip","Inv"}
+	for _, nm in ipairs(panels) do
+		if not nameToKeep or nm ~= nameToKeep then
+			local g = playerGui:FindFirstChild(nm) or playerGui:FindFirstChild(nm, true)
+			if g then
+				for _, d in ipairs(g:GetDescendants()) do
+					if d:IsA("LocalScript") then
+						pcall(function()
+							d:SetAttribute("Hide", true)
+							d:SetAttribute("Show", false)
+						end)
+					end
+				end
+			end
+		end
+	end
+end
+
+-- Toggle debounce state shared by toggles
+local toggleDebounce = false
+local lastToggle = 0
+local toggleCooldown = 0.25
+
+-- Inv toggle
+local function getInvGui()
+	return playerGui:FindFirstChild("Inv") or playerGui:FindFirstChild("Inv", true)
+end
+
+local function toggleInv()
+	if toggleDebounce then return end
+	local now = tick()
+	if (now - lastToggle) < toggleCooldown then return end
+	lastToggle = now
+	toggleDebounce = true
+
+	local invGui = getInvGui()
+	if not invGui then
+		warn("[GeneralUI] Inv GUI não encontrado")
+		toggleDebounce = false
+		return
+	end
+	local localScript = invGui:FindFirstChild("LocalScript") or invGui:FindFirstChildWhichIsA("LocalScript", true)
+	if not localScript then
+		for _, d in ipairs(invGui:GetDescendants()) do
+			if d:IsA("LocalScript") then
+				localScript = d
+				break
+			end
+		end
+	end
+	if not localScript then
+		warn("[GeneralUI] LocalScript de Inv não encontrado")
+		toggleDebounce = false
+		return
+	end
+	local frame = invGui:FindFirstChild("Frame") or invGui:FindFirstChild("Frame", true)
+	local isVisible = frame and frame.Visible
+	if isVisible then
+		localScript:SetAttribute("Hide", true)
+		localScript:SetAttribute("Show", false)
+		print("[GeneralUI] Fechando Inv")
+	else
+		closeAllPanels("Inv")
+		localScript:SetAttribute("Show", false)
+		localScript:SetAttribute("Hide", false)
+		task.delay(0.02, function()
+			if not (frame and frame.Visible) then
+				localScript:SetAttribute("Show", true)
+				print("[GeneralUI] Abrindo Inv (pulso Show=true)")
+			end
+		end)
+	end
+	task.delay(0.05, function() toggleDebounce = false end)
+end
+
+-- Codes toggle
+local function toggleCodes()
+	if toggleDebounce then return end
+	local now = tick()
+	if (now - lastToggle) < toggleCooldown then return end
+	lastToggle = now
+	toggleDebounce = true
+
+	local codesGui = getCodesGui()
+	if not codesGui then
+		warn("[GeneralUI] Codes GUI não encontrado")
+		toggleDebounce = false
+		return
+	end
+	local localScript = codesGui:FindFirstChild("LocalScript") or codesGui:FindFirstChildWhichIsA("LocalScript", true)
+	if not localScript then
+		warn("[GeneralUI] LocalScript de Codes não encontrado")
+		toggleDebounce = false
+		return
+	end
+	local firstFrame = codesGui:FindFirstChild("1st") or codesGui:FindFirstChild("1st", true)
+	local isVisible = firstFrame and firstFrame.Visible
+	if isVisible then
+		localScript:SetAttribute("Hide", true)
+		localScript:SetAttribute("Show", false)
+		print("[GeneralUI] Fechando Codes (Hide=true Show=false)")
+	else
+		localScript:SetAttribute("Show", false)
+		localScript:SetAttribute("Hide", false)
+		task.delay(0.02, function()
+			if not (firstFrame and firstFrame.Visible) then
+				closeAllPanels("Codes")
+				localScript:SetAttribute("Show", true)
+				print("[GeneralUI] Abrindo Codes (pulso Show=true)")
+			end
+		end)
+	end
+	task.delay(0.05, function() toggleDebounce = false end)
+end
+
+-- Missions button connect
+if btnMissions and btnMissions:IsA("ImageButton") then
+	btnMissions.MouseButton1Click:Connect(function()
+		local missionsGui = getMissionsGui()
+		if not missionsGui then
+			warn("[GeneralUI] Missions GUI não encontrado")
+			return
+		end
+		local firstFrame = missionsGui:FindFirstChild("1st") or missionsGui:FindFirstChild("1st", true)
+		local localScript = missionsGui:FindFirstChild("LocalScript") or missionsGui:FindFirstChildWhichIsA("LocalScript", true)
+		if not localScript then
+			warn("[GeneralUI] LocalScript de Missions não encontrado")
+			return
+		end
+		if firstFrame and firstFrame.Visible then
+			localScript:SetAttribute("Hide", true)
+			localScript:SetAttribute("Show", false)
+		else
+			closeAllPanels("Missions")
+			localScript:SetAttribute("Show", false)
+			localScript:SetAttribute("Hide", false)
+			task.delay(0.02, function()
+				if not (firstFrame and firstFrame.Visible) then
+					localScript:SetAttribute("Show", true)
+				end
+			end)
+		end
+	end)
+end
+
+-- Connect Codes / Inv buttons
+if btnCodes and btnCodes:IsA("ImageButton") then
+	btnCodes.MouseButton1Click:Connect(toggleCodes)
+end
+if btnInv and btnInv:IsA("ImageButton") then
+	btnInv.MouseButton1Click:Connect(toggleInv)
 end
 
 -- Permitir clicar em um slot equipado para abrir inventário já focado naquele personagem

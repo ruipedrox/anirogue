@@ -36,6 +36,8 @@ local HttpService = game:GetService("HttpService")
 local CharacterInventory = require(ScriptsFolder:WaitForChild("CharacterInventory"))
 local SaleAudit = require(ScriptsFolder:WaitForChild("SaleAudit"))
 local SummonModule = require(ScriptsFolder:WaitForChild("SummonModule"))
+local RedeemCodes = require(ScriptsFolder:WaitForChild("RedeemCodes"))
+local MissionsService = require(ScriptsFolder:WaitForChild("MissionsService"))
 
 local GetProfileRF = Instance.new("RemoteFunction")
 GetProfileRF.Name = "GetProfile"
@@ -150,6 +152,23 @@ local DebugAddCoinsRE = Instance.new("RemoteEvent")
 DebugAddCoinsRE.Name = "DebugAddCoins"
 DebugAddCoinsRE.Parent = remotesFolder
 
+local DebugResetCodesRE = Instance.new("RemoteEvent")
+DebugResetCodesRE.Name = "DebugResetCodes"
+DebugResetCodesRE.Parent = remotesFolder
+
+-- Missions system
+local GetMissionsStatusRF = Instance.new("RemoteFunction")
+GetMissionsStatusRF.Name = "GetMissionsStatus"
+GetMissionsStatusRF.Parent = remotesFolder
+
+local ClaimMissionRewardRE = Instance.new("RemoteEvent")
+ClaimMissionRewardRE.Name = "ClaimMissionReward"
+ClaimMissionRewardRE.Parent = remotesFolder
+
+local MissionProgressUpdatedRE = Instance.new("RemoteEvent")
+MissionProgressUpdatedRE.Name = "MissionProgressUpdated"
+MissionProgressUpdatedRE.Parent = remotesFolder
+
 -- SummonState removed: client now decides open/close locally. Keep single Open_Summon remote.
 
 -- Story progression remotes
@@ -170,6 +189,16 @@ StartStoryRunRE.Parent = remotesFolder
 local DebugGiveTestItemsRE = Instance.new("RemoteEvent")
 DebugGiveTestItemsRE.Name = "DebugGiveTestItems"
 DebugGiveTestItemsRE.Parent = remotesFolder
+
+-- Redeem Code: Client sends a code string, server validates and grants rewards
+local RedeemCodeRE = Instance.new("RemoteEvent")
+RedeemCodeRE.Name = "RedeemCode"
+RedeemCodeRE.Parent = remotesFolder
+
+-- Result of code redemption (Success, Message, Rewards)
+local RedeemCodeResultRE = Instance.new("RemoteEvent")
+RedeemCodeResultRE.Name = "RedeemCodeResult"
+RedeemCodeResultRE.Parent = remotesFolder
 
 local function sendFullProfile(player)
 	local profile = ProfileService:Get(player)
@@ -988,11 +1017,23 @@ RequestSummonRE.OnServerEvent:Connect(function(player, qty)
 			end
 		end
 
+		-- Debug: compute createdCount and log summary
+		local createdCount = #created
+		local templateList = {}
+		for _, c in ipairs(created) do
+			table.insert(templateList, tostring(c.Template or c.template or c.TemplateName or c.Id or c.id))
+		end
+
+		-- Track summons for missions: increment TotalSummons by createdCount BEFORE sending snapshot
+		if createdCount > 0 and MissionsService and type(MissionsService.IncrementSummons) == "function" then
+			pcall(function()
+				MissionsService:IncrementSummons(profile, createdCount)
+			end)
+		end
+
 		-- Send updated full snapshot to client (includes updated Gems and new characters)
 		local snap = ProfileService:BuildClientSnapshot(profile)
 		inspectAndFireFullSnapshot(player, snap)
-		-- Debug: log summary of created items for easier diagnosis
-		local createdCount = #created
 		local templateList = {}
 		for _, c in ipairs(created) do
 			table.insert(templateList, tostring(c.Template or c.template or c.TemplateName or c.Id or c.id))
@@ -1003,6 +1044,7 @@ RequestSummonRE.OnServerEvent:Connect(function(player, qty)
 		else
 			warn(string.format("[RequestSummon] No characters were created for %s (requested=%d). Check CharacterService:AddCharacter failures above.", player.Name, qty))
 		end
+
 		-- Notify client which summons succeeded and remaining gems
 		SummonGrantedRE:FireClient(player, { success = true, created = created, requested = qty, cost = cost, gemsRemaining = profile.Account.Gems })
 	end)
@@ -1025,23 +1067,24 @@ game:BindToClose(function()
 	end
 end)
 
+-- Helper functions
+local function isStudio()
+	local ok, RunService = pcall(function() return game:GetService("RunService") end)
+	return ok and RunService and RunService:IsStudio()
+end
+
+local function pushSnapshot(player)
+	local profile = ProfileService:Get(player)
+	if profile then
+		local snap = ProfileService:BuildClientSnapshot(profile)
+		inspectAndFireFullSnapshot(player, snap)
+	end
+end
+
 -- =============================
 -- Debug grants (Studio only)
 -- =============================
 do
-	local function isStudio()
-		local ok, RunService = pcall(function() return game:GetService("RunService") end)
-		return ok and RunService and RunService:IsStudio()
-	end
-
-	local function pushSnapshot(player)
-		local profile = ProfileService:Get(player)
-		if profile then
-			local snap = ProfileService:BuildClientSnapshot(profile)
-			inspectAndFireFullSnapshot(player, snap)
-		end
-	end
-
 	DebugAddGemsRE.OnServerEvent:Connect(function(player, amount)
 		if not isStudio() then return end
 		local profile = ProfileService:Get(player)
@@ -1061,7 +1104,95 @@ do
 		pushSnapshot(player)
 		print(string.format("[DebugAddCoins] %s +%d (now %d)", player.Name, amount, profile.Account.Coins or 0))
 	end)
+
+	DebugResetCodesRE.OnServerEvent:Connect(function(player)
+		if not isStudio() then return end
+		local profile = ProfileService:Get(player)
+		if not profile then return end
+		profile.Account.RedeemedCodes = {}
+		pushSnapshot(player)
+		print(string.format("[DebugResetCodes] %s - Códigos resgatados resetados", player.Name))
+	end)
 end
+
+-- =============================
+-- Redeem Code Handler
+-- =============================
+RedeemCodeRE.OnServerEvent:Connect(function(player, codeInput)
+	if not player or not codeInput then return end
+	
+	local profile = ProfileService:Get(player)
+	if not profile then
+		warn("[RedeemCode] No profile for", player.Name)
+		return
+	end
+	
+	-- Normalize code to uppercase
+	local code = string.upper(tostring(codeInput))
+	
+	-- Ensure RedeemedCodes table exists (for older profiles)
+	if not profile.Account.RedeemedCodes then
+		profile.Account.RedeemedCodes = {}
+	end
+	
+	-- Check if already redeemed
+	if profile.Account.RedeemedCodes[code] then
+		print(string.format("[RedeemCode] %s tried to redeem '%s' - already redeemed", player.Name, code))
+		-- Send failure back to client
+		local result = remotesFolder:FindFirstChild("RedeemCodeResult")
+		if result and result:IsA("RemoteEvent") then
+			result:FireClient(player, false, "You have already redeemed this code!")
+		end
+		return
+	end
+	
+	-- Validate code
+	local isValid, codeDataOrError = RedeemCodes:IsValidCode(code)
+	if not isValid then
+		print(string.format("[RedeemCode] %s tried to redeem '%s' - %s", player.Name, code, tostring(codeDataOrError)))
+		local result = remotesFolder:FindFirstChild("RedeemCodeResult")
+		if result and result:IsA("RemoteEvent") then
+			result:FireClient(player, false, codeDataOrError or "Invalid code")
+		end
+		return
+	end
+	
+	-- Get rewards
+	local rewards = RedeemCodes:GetRewards(code)
+	if not rewards then
+		warn("[RedeemCode] Failed to get rewards for code:", code)
+		return
+	end
+	
+	print(string.format("[RedeemCode] Applying rewards - Gold: %d, Gems: %d", rewards.Gold or 0, rewards.Gems or 0))
+	print(string.format("[RedeemCode] Before - Coins: %d, Gems: %d", profile.Account.Coins or 0, profile.Account.Gems or 0))
+	
+	-- Apply rewards
+	if rewards.Gold and rewards.Gold > 0 then
+		profile.Account.Coins = (profile.Account.Coins or 0) + rewards.Gold
+	end
+	if rewards.Gems and rewards.Gems > 0 then
+		profile.Account.Gems = (profile.Account.Gems or 0) + rewards.Gems
+	end
+	
+	print(string.format("[RedeemCode] After - Coins: %d, Gems: %d", profile.Account.Coins or 0, profile.Account.Gems or 0))
+	
+	-- Mark code as redeemed
+	profile.Account.RedeemedCodes[code] = os.time()
+	
+	-- Save profile
+	pushSnapshot(player)
+	print("[RedeemCode] Snapshot sent to client")
+	
+	print(string.format("[RedeemCode] %s redeemed '%s' - Gold: +%d, Gems: +%d", 
+		player.Name, code, rewards.Gold or 0, rewards.Gems or 0))
+	
+	-- Send success to client
+	local result = remotesFolder:FindFirstChild("RedeemCodeResult")
+	if result and result:IsA("RemoteEvent") then
+		result:FireClient(player, true, string.format("Code redeemed! +%d Gold, +%d Gems", rewards.Gold or 0, rewards.Gems or 0))
+	end
+end)
 
 -- =============================
 -- Upgrade Item implementation
@@ -1217,3 +1348,55 @@ do
 		return result
 	end
 end
+
+-- =============================
+-- Missions System
+-- =============================
+
+-- Get all missions status for a player
+GetMissionsStatusRF.OnServerInvoke = function(player)
+	local profile = ProfileService:Get(player)
+	if not profile then
+		warn("[GetMissionsStatus] No profile for", player.Name)
+		return { success = false, message = "Profile not found" }
+	end
+	
+	local missionsStatus = MissionsService:GetAllMissionsStatus(profile)
+	
+	return {
+		success = true,
+		missions = missionsStatus,
+		claimableCount = MissionsService:GetClaimableCount(profile)
+	}
+end
+
+-- Claim mission reward
+ClaimMissionRewardRE.OnServerEvent:Connect(function(player, missionID)
+	if not player or not missionID then return end
+	
+	local profile = ProfileService:Get(player)
+	if not profile then
+		warn("[ClaimMissionReward] No profile for", player.Name)
+		return
+	end
+	
+	local success, message = MissionsService:ClaimMissionReward(profile, missionID)
+	
+	if success then
+		-- Save and update client
+		pushSnapshot(player)
+		print(string.format("[ClaimMissionReward] %s claimed %s - %s", player.Name, missionID, message))
+	end
+	
+	-- Send result back to client (via existing remote or create new one)
+	-- For now, client will refresh missions list after claiming
+	if MissionProgressUpdatedRE then
+		MissionProgressUpdatedRE:FireClient(player, {
+			success = success,
+			message = message,
+			missionID = missionID
+		})
+	end
+end)
+
+print("[Remotes] Missions system loaded")

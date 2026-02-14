@@ -10,4 +10,7 @@ SasukeStats.Passives = {
 	Health = 300,      -- 2x do 3★ (150)
 }
 
+-- XP dado quando consumido no Feed (4 = 15000)
+SasukeStats.FeedXP = 15000
+
 return SasukeStats

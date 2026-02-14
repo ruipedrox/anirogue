@@ -16,6 +16,7 @@ local ProfileTemplate = {
         RunsCompleted = 0,
         BestDepth = 0,
         HighInfWave = 0, -- maior wave alcançada no modo infinito
+        RedeemedCodes = {}, -- ["CODE_NAME"] = timestamp when redeemed
     },
     Characters = {
         -- Instâncias iniciais: usar raridades 3 estrelas (Goku_3, Naruto_3)
@@ -55,6 +56,29 @@ local ProfileTemplate = {
     Story = {
         -- Maps[MapId] = { MaxUnlockedLevel = 0..3, LevelsCompleted = { [1]=true, [2]=true, ... } }
         Maps = {},
+    },
+    -- Progresso do modo Infinite
+    Infinite = {
+        HighestWave = 0, -- maior wave alcançada
+        MilestonesReached = {}, -- [10]=true, [20]=true, [30]=true ... para first time bonus tracking
+    },
+    -- Sistema de Missões
+    Missions = {
+        Progress = {
+            -- Tracking de progresso para cada tipo de missão
+            StoryLevelsCompleted = 0,    -- Total de levels de story completados
+            TotalDamageDealt = 0,         -- Dano total causado (todas as runs)
+            HighestInfiniteWave = 0,      -- Maior wave alcançada no infinite
+            TotalEvolves = 0,             -- Total de evolves feitos
+            TotalSummons = 0,             -- Total de summons feitos
+        },
+        -- Para missões infinitas, guardamos o último tier resgatado
+        InfiniteTiersClaimed = {
+            -- ["total_damage"] = 5,  -- tier 5 já foi resgatado
+            -- ["infinite_waves"] = 3, -- tier 3 já foi resgatado
+            -- ["evolves_infinite"] = 2,
+            -- ["summons_infinite"] = 1,
+        },
     },
     Meta = {
         Settings = { Language = "en" },

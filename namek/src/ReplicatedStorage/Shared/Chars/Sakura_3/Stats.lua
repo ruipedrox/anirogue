@@ -9,4 +9,7 @@ SakuraStats.Passives = {
 	Health = 360,
 }
 
+-- XP dado quando consumido no Feed (3 = 5000)
+SakuraStats.FeedXP = 5000
+
 return SakuraStats

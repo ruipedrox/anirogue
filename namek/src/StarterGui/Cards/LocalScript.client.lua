@@ -13,6 +13,7 @@ local bg = gui:FindFirstChild("BG") -- novo container/overlay
 local selectionLocked = false
 local pendingServerCards = nil -- oferta enviada pelo servidor (se existir)
 local isAnimating = false
+local cancelPendingHide = false -- flag to cancel pending hide operations
 local originalPositions = {}
 local basePositions = {} -- posições fixas capturadas na primeira vez
 local offscreenPositions = {} -- posições totalmente fora do ecrã para animação
@@ -116,7 +117,13 @@ end
 local RunService = game:GetService("RunService")
 
 local function animateShow(regenerate)
-    if isAnimating then return end
+    -- Force reset if called during animation (for multi-level ups)
+    if isAnimating then
+        print("[CardsUI] animateShow called while animating - forcing reset")
+        isAnimating = false
+        selectionLocked = false
+    end
+    
     isAnimating = true
     selectionLocked = true
 
@@ -294,6 +301,12 @@ local function animateHide()
     end
     -- Desligar GUI ao final
     task.delay(#frames*delayPer + 0.28, function()
+        -- Check if hide was cancelled (new offer arrived)
+        if cancelPendingHide then
+            print("[CardsUI] Hide cancelled - new offer arrived")
+            cancelPendingHide = false
+            return
+        end
         setGuiVisible(false)
         if bg then bg.BackgroundTransparency = 1 end
         selectionLocked = false
@@ -612,6 +625,21 @@ if LevelUpEvent then
         if typeof(payload) == "table" and typeof(payload.cards) == "table" then
             print("[CardsUI] Oferta recebida do servidor (" .. tostring(#payload.cards) .. ")")
             pendingServerCards = payload.cards
+            
+            -- Cancel any pending hide operations from previous card selection
+            cancelPendingHide = true
+            
+            -- Force reset animation state in case previous hide animation is still running
+            selectionLocked = false
+            isAnimating = false
+            
+            -- Force GUI to be visible immediately (cancel any pending hide)
+            setGuiVisible(true)
+            if bg then 
+                bg.Visible = true 
+                bg.BackgroundTransparency = 1
+            end
+            
             -- Mostra usando animação (não regenera porque já recebemos a lista)
             showCards(false)
         else

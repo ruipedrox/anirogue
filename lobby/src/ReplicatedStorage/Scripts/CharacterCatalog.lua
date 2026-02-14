@@ -23,6 +23,14 @@ local Catalog = {
     Loaded = false,
 }
 
+-- Templates that should NOT appear in banners
+local BANNER_BLACKLIST = {
+    ["xp3"] = true,
+    ["xp4"] = true,
+    ["xp5"] = true,
+    ["Character_Template"] = true,
+}
+
 local function shallowCopy(src)
     local t = {}
     for k,v in pairs(src) do t[k] = v end
@@ -87,6 +95,8 @@ function Catalog:_load()
                 cardCount = flattenCardDefs(cardsDefs),
                 icon_id = "rbxassetid://" .. tostring(iconId),
                 source = "Character",
+                -- allow in banner by default, except for explicit blacklist
+                allow_in_banner = not BANNER_BLACKLIST[tostring(templateName):lower()],
             }
             self.List[templateName] = entry
         end
@@ -127,6 +137,14 @@ function Catalog:Iter()
         i += 1
         return ordered[i]
     end
+end
+
+function Catalog:CanAppearInBanner(templateName)
+    if not templateName then return false end
+    self:_load()
+    local entry = self.List[tostring(templateName)]
+    if not entry then return false end
+    return entry.allow_in_banner ~= false
 end
 
 -- Validação rápida para debugging / UI build

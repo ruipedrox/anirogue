@@ -1,5 +1,8 @@
 BUGS POR CORRIGIR:
--n dá cleanup no death beam do frieza
+-nenhum para já
+-O único detalhe que falta é processar o RunResult.Infinite no lobby para atualizar o perfil. Queres que adicione isso agora ou testamos primeiro?
+-verificar o getuga tenshou pq acho que só dá dano no primeiro inimigo
+-butão do summon ui n funfa
 
 NÂO ESQUECER:
 -Verificar se o DOT está a funcionar corretamente
@@ -9,16 +12,12 @@ NÂO ESQUECER:
 -verificar os drops de cada lvl, se está direito ou n
 
 FEATURES POR IMPLEMENTAR:
--por codigos de recompensas(tipo o astd)
--mapa de Namek(dragon ball) fase final
--modo infinito(importante)
--missões semanais/diarias e 1 time achivements
 -evolutions(os items/ui e personagens estão feitos falta só o código da mecanica mesmo)
 -sound effects
+-criar dev products
 
 FUTURAS FEATURES:
 -leaderboard e leaderboard rewards
-
 -catalogo com todos os personagens(rewards por cada novo char desbloqueado)
 -items colecionaveis(cosmeticos)
 -6 Star Chars

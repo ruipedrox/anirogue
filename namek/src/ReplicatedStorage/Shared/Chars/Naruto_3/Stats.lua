@@ -9,4 +9,7 @@ NarutoStats.Passives = {
 	Health = 100,
 }
 
+-- XP dado quando consumido no Feed (3 = 5000)
+NarutoStats.FeedXP = 5000
+
 return NarutoStats

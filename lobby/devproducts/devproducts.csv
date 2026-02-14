@@ -1,0 +1,13 @@
+sku,type,price_robux,amount,name,description
+gems_25,gems,25,100,Gems Pack - 100,100 Gems - Budget pack
+gems_100,gems,100,500,Gems Pack - 500,500 Gems
+gems_200,gems,200,1250,Gems Pack - 1,250,1,250 Gems
+gems_400,gems,400,3000,Gems Pack - 3,000,3,000 Gems
+gems_800,gems,800,7000,Gems Pack - 7,000,7,000 Gems
+gems_1600,gems,1600,15000,Gems Pack - 15,000,15,000 Gems
+
+gold_100,gold,100,10000,Gold Pack - 10,000,10,000 Gold
+gold_200,gold,200,25000,Gold Pack - 25,000,25,000 Gold
+gold_400,gold,400,70000,Gold Pack - 70,000,70,000 Gold
+gold_800,gold,800,200000,Gold Pack - 200,000,200,000 Gold
+gold_1600,gold,1600,500000,Gold Pack - 500,000,500,000 Gold

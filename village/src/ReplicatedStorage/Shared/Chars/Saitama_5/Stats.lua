@@ -10,4 +10,7 @@ SaitamaStats.Passives = {
 	Health = 60,      -- Reduzido - escala com treino
 }
 
+-- XP dado quando consumido no Feed (5 = 50000)
+SaitamaStats.FeedXP = 50000
+
 return SaitamaStats

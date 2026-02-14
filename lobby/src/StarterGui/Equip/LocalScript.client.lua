@@ -153,6 +153,222 @@ local sellText2 = sellPanel and sellPanel:FindFirstChild("2st_text") or sellPane
 local sellAnimating = false
 if sellPanel then sellPanel.Visible = false end
 
+-- Multi-select state for Equip UI
+local selectMode = false
+local selectedForSell = {} -- map name -> true
+
+local function applySelectionOverlayToIcon(iconFrame, enabled)
+	if not iconFrame then return end
+	local overlay = iconFrame:FindFirstChild("SelectOverlay")
+	if enabled then
+		if not overlay then
+			overlay = Instance.new("Frame")
+			overlay.Name = "SelectOverlay"
+			overlay.AnchorPoint = Vector2.new(1,0)
+			overlay.Size = UDim2.fromScale(0.28, 0.28)
+			overlay.Position = UDim2.new(1, -2, 0, 2)
+			overlay.BackgroundTransparency = 1
+			overlay.ZIndex = 130
+			-- shadowed S
+			local function createShadow(offsetX, offsetY)
+				local s = Instance.new("TextLabel")
+				s.Name = "S"
+				s.AnchorPoint = Vector2.new(0.5,0.5)
+				s.Position = UDim2.new(0.5, offsetX, 0.5, offsetY)
+				s.Size = UDim2.fromScale(1,1)
+				s.BackgroundTransparency = 1
+				s.Text = "S"
+				s.Font = Enum.Font.FredokaOne
+				s.TextScaled = true
+				s.TextColor3 = Color3.new(0,0,0)
+				s.ZIndex = 131
+				s.Parent = overlay
+			end
+			local offsets = { {-2,0},{2,0},{0,-2},{0,2},{-2,-2},{2,-2},{-2,2},{2,2} }
+			for _, off in ipairs(offsets) do createShadow(off[1], off[2]) end
+			local main = Instance.new("TextLabel")
+			main.Name = "Main"
+			main.AnchorPoint = Vector2.new(0.5,0.5)
+			main.Position = UDim2.new(0.5, 0, 0.5, 0)
+			main.Size = UDim2.fromScale(1,1)
+			main.BackgroundTransparency = 1
+			main.Text = "S"
+			main.Font = Enum.Font.FredokaOne
+			main.TextScaled = true
+			main.TextColor3 = Color3.fromRGB(40,180,255)
+			main.ZIndex = 132
+			main.Parent = overlay
+			overlay.Parent = iconFrame
+		end
+		overlay.Visible = true
+	else
+		if overlay then overlay.Visible = false end
+	end
+end
+
+local selectButton = frame:FindFirstChild("Select_button") or frame:FindFirstChild("Select") or rootGui:FindFirstChild("Select_button")
+local function getSelectClickable()
+	if not selectButton then return nil end
+	if selectButton:IsA("TextButton") or selectButton:IsA("ImageButton") then return selectButton end
+	local named = selectButton:FindFirstChild("Select") or selectButton:FindFirstChildWhichIsA("TextButton") or selectButton:FindFirstChildWhichIsA("ImageButton")
+	if named and (named:IsA("TextButton") or named:IsA("ImageButton")) then return named end
+	for _, d in ipairs(selectButton:GetDescendants()) do
+		if d:IsA("TextButton") or d:IsA("ImageButton") then return d end
+	end
+	return nil
+end
+
+local function setSelectButtonText(txt)
+	local btn = getSelectClickable()
+	if not btn then return end
+	pcall(function() btn.Text = txt end)
+end
+
+-- Exact top-level Sell_button frame (use exact name only)
+local topSellFrame = frame:FindFirstChild("Sell_button")
+if topSellFrame and topSellFrame:IsA("GuiObject") then
+	pcall(function() topSellFrame.Visible = false end)
+end
+
+local function getTopSellClickable()
+	if not topSellFrame then return nil end
+	if topSellFrame:IsA("TextButton") or topSellFrame:IsA("ImageButton") then return topSellFrame end
+	local named = topSellFrame:FindFirstChild("Sell") or topSellFrame:FindFirstChildWhichIsA("TextButton") or topSellFrame:FindFirstChildWhichIsA("ImageButton")
+	if named and (named:IsA("TextButton") or named:IsA("ImageButton")) then return named end
+	for _, d in ipairs(topSellFrame:GetDescendants()) do
+		if d:IsA("TextButton") or d:IsA("ImageButton") then return d end
+	end
+	return nil
+end
+
+-- helper to compute sell value from an item entry (uses rarity inference)
+local function sellValueForEntry(entry)
+	if not entry then return 0 end
+	local templateName = (entry.data and entry.data.Template) or entry.id
+	local rarityKey = "comum"
+	if type(resolveRarity) == "function" then
+		local ok, r1, r2 = pcall(resolveRarity, entry.group, templateName)
+		if ok and r1 then rarityKey = r1 end
+	end
+	local mapping = { comum = 100, raro = 500, epico = 1000, lendario = 2500, mitico = 5000 }
+	return mapping[rarityKey] or 100
+end
+
+-- Open multi-sell confirmation with aggregated total for provided names (group_id)
+local pendingSellIds = nil
+local function openMultiSellConfirm(names)
+	if not sellPanel or not names or #names == 0 then return end
+	-- compute total
+	local total = 0
+	local ids = {}
+	for _, name in ipairs(names) do
+		-- name format group_id
+		local frame = scrolling:FindFirstChild(name)
+		local id = nil
+		if frame then
+			id = frame:GetAttribute("ItemId") or frame.Name:match("_(.+)$")
+		else
+			-- try parse
+			local u = name:match(".+_(.+)$")
+			id = u
+		end
+		-- find entry in currentItems
+		local found = nil
+		for _, e in ipairs(currentItems) do
+			if tostring(e.id) == tostring(id) then found = e break end
+		end
+		if found then
+			total = total + sellValueForEntry(found)
+			table.insert(ids, found.id)
+		end
+	end
+	if #ids == 0 then return end
+		pendingSellIds = ids
+		print("[EquipUI] openMultiSellConfirm -> ids count:", #ids)
+		for i,v in ipairs(ids) do print("[EquipUI] -> id", i, v) end
+	pendingSellId = nil
+	-- update sellPanel texts
+	if sellText1 and sellText1:IsA("TextLabel") then
+		sellText1.Text = string.format("Do you want to sell %d items for", #ids)
+	end
+	if sellText2 and sellText2:IsA("TextLabel") then
+		sellText2.Text = string.format("%d coins", total)
+	end
+	-- animate/show
+	sellPanel.Visible = true
+	sellAnimating = true
+	local finalPos = sellPanel.Position
+	local absY = sellPanel.AbsoluteSize.Y
+	if absY == 0 then task.wait() absY = sellPanel.AbsoluteSize.Y end
+	if absY == 0 then absY = 300 end
+	local startPos = UDim2.new(finalPos.X.Scale, finalPos.X.Offset, -1, -absY)
+	sellPanel.Position = startPos
+	pcall(function()
+		TweenService:Create(sellPanel, TweenInfo.new(0.30, Enum.EasingStyle.Quad, Enum.EasingDirection.Out), { Position = finalPos }):Play()
+	end)
+	task.delay(0.32, function() sellAnimating = false end)
+end
+
+local topSellClickable = getTopSellClickable()
+if topSellClickable then
+	pcall(function()
+		topSellClickable.MouseButton1Click:Connect(function()
+			if selectMode then
+				local names = {}
+				for name, _ in pairs(selectedForSell) do table.insert(names, name) end
+				if #names > 0 then openMultiSellConfirm(names) end
+			else
+				-- not in select mode: ignore or fallback to preview sell if needed
+			end
+		end)
+	end)
+end
+
+
+
+-- Hook up Select button to toggle select mode
+local selectClickable = getSelectClickable()
+local function exitSelectMode()
+	if not selectMode then return end
+	selectMode = false
+	for name, _ in pairs(selectedForSell) do
+		local f = scrolling:FindFirstChild(name)
+		if f then pcall(function() applySelectionOverlayToIcon(f, false) end) end
+	end
+	selectedForSell = {}
+	setSelectButtonText("Select")
+	if topSellFrame and topSellFrame:IsA("GuiObject") then pcall(function() topSellFrame.Visible = false end) end
+end
+
+if selectClickable then
+	pcall(function()
+		selectClickable.MouseButton1Click:Connect(function()
+			if not selectMode then
+				selectMode = true
+				selectedForSell = {}
+				setSelectButtonText("Cancel (0)")
+				-- show exact Sell_button frame while in select mode
+				if topSellFrame and topSellFrame:IsA("GuiObject") then pcall(function() topSellFrame.Visible = true end) end
+			else
+				-- exiting select mode: clear overlays and reset
+				selectMode = false
+				for name, _ in pairs(selectedForSell) do
+					local f = scrolling:FindFirstChild(name)
+					if f then applySelectionOverlayToIcon(f, false) end
+				end
+				selectedForSell = {}
+				setSelectButtonText("Select")
+				-- hide the Sell_button frame when leaving select mode
+				if topSellFrame and topSellFrame:IsA("GuiObject") then pcall(function() topSellFrame.Visible = false end) end
+			end
+		end)
+	end)
+else
+	-- no clickable found; optionally warn in Studio
+	local RunService = game:GetService("RunService")
+	if RunService:IsStudio() then warn("[EquipUI] Select clickable not found (Select_button)") end
+end
+
 -- Conectar Card_b para abrir a UI de Cards (replicar comportamento de Chars_Inv)
 if previewCardButton then
 	if previewCardButton.Activated then
@@ -884,11 +1100,41 @@ local function createIcon(itemType, itemId, data)
 	if btn and (btn:IsA("ImageButton") or btn:IsA("ImageLabel") or btn:IsA("GuiObject")) then
 		if btn.Activated then
 			btn.Activated:Connect(function()
+				if selectMode then
+					-- prevent selecting items that are equipped
+					if data and data.Equipped then
+						warn("[EquipUI] Cannot select equipped item for sell: " .. tostring(itemId))
+						return
+					end
+					local name = (itemType .. "_" .. itemId)
+					local isNow = not (selectedForSell[name] == true)
+					selectedForSell[name] = isNow and true or nil
+					applySelectionOverlayToIcon(clone, isNow)
+					local count = 0
+					for _, v in pairs(selectedForSell) do if v then count += 1 end end
+					setSelectButtonText(string.format("Cancel (%d)", count))
+					return
+				end
 				updatePreview({ group = itemType, id = itemId, data = data })
 			end)
 		else
 			btn.InputBegan:Connect(function(input)
 				if input.UserInputType.Name == "MouseButton1" or input.UserInputType.Name == "Touch" then
+					if selectMode then
+						-- prevent selecting items that are equipped
+						if data and data.Equipped then
+							warn("[EquipUI] Cannot select equipped item for sell: " .. tostring(itemId))
+							return
+						end
+						local name = (itemType .. "_" .. itemId)
+						local isNow = not (selectedForSell[name] == true)
+						selectedForSell[name] = isNow and true or nil
+						applySelectionOverlayToIcon(clone, isNow)
+						local count = 0
+						for _, v in pairs(selectedForSell) do if v then count += 1 end end
+						setSelectButtonText(string.format("Cancel (%d)", count))
+						return
+					end
 					updatePreview({ group = itemType, id = itemId, data = data })
 				end
 			end)
@@ -1129,6 +1375,12 @@ local function render()
 	for _, entry in ipairs(currentItems) do
 		createIcon(entry.group, entry.id, entry.data)
 	end
+
+	-- Reapply selection overlays after icons recreated
+	for name, _ in pairs(selectedForSell) do
+		local f = scrolling:FindFirstChild(name)
+		if f then applySelectionOverlayToIcon(f, true) end
+	end
 	rebuildEquippedSlots()
 	-- Defensive: if the currently previewed item was removed from currentItems, close the preview
 	if selectedItemId and selectedGroup then
@@ -1304,6 +1556,10 @@ local function hide()
 			closeSellConfirm()
 		end
 	end)
+	-- Exit select mode if active
+	if type(exitSelectMode) == "function" then
+		pcall(function() exitSelectMode() end)
+	end
 	local tw = TweenService:Create(frame, tweenInfo, { Position = hiddenPos })
 	tw:Play()
 	tw.Completed:Connect(function()
@@ -1559,6 +1815,48 @@ do
 
 	if sellYesButton and sellYesButton:IsA("ImageButton") then
 		sellYesButton.MouseButton1Click:Connect(function()
+		print("[EquipUI] sellYesButton clicked; pendingSellId, pendingSellIds:", tostring(pendingSellId), pendingSellIds and #pendingSellIds or 0)
+			-- Multi-sell path
+			if pendingSellIds and #pendingSellIds > 0 then
+				local sellRE = getRemote("SellItem") or Remotes:FindFirstChild("SellItem")
+				if not sellRE then
+					-- fallback: optimistic local removal and close
+					for _, pid in ipairs(pendingSellIds) do
+						for i = #currentItems, 1, -1 do
+							if currentItems[i] and tostring(currentItems[i].id) == tostring(pid) then
+								table.remove(currentItems, i)
+								break
+							end
+						end
+					end
+					rebuildEquippedSlots()
+					render()
+					closeSellConfirm()
+					exitSelectMode()
+					print(string.format("[EquipUI] Sold items locally (no remote) -> %d items", #pendingSellIds))
+					pendingSellIds = nil
+					return
+				end
+				for _, pid in ipairs(pendingSellIds) do
+					local ok, err = pcall(function() sellRE:FireServer(pid) end)
+					if not ok then warn("[EquipUI] Sell remote failed:", err) end
+					-- optimistic removal per id
+					for i = #currentItems, 1, -1 do
+						if currentItems[i] and tostring(currentItems[i].id) == tostring(pid) then
+							table.remove(currentItems, i)
+							break
+						end
+					end
+				end
+				rebuildEquippedSlots()
+				render()
+				closeSellConfirm()
+				exitSelectMode()
+				pendingSellIds = nil
+				return
+			end
+
+			-- Single-item fallback (existing behavior)
 			if not pendingSellId then return end
 			local sellRE = getRemote("SellItem") or Remotes:FindFirstChild("SellItem")
 			if not sellRE then
@@ -1576,6 +1874,7 @@ do
 					pcall(function() closePreview() end)
 				end
 				closeSellConfirm()
+				exitSelectMode()
 				print(string.format("[EquipUI] Sold item locally (no remote) -> %s", tostring(pendingSellId)))
 				pendingSellId = nil
 				return
@@ -1597,6 +1896,7 @@ do
 				pcall(function() closePreview() end)
 			end
 			closeSellConfirm()
+			exitSelectMode()
 			pendingSellId = nil
 		end)
 	end

@@ -10,4 +10,7 @@ GokuStats.Passives = {
 	Health = 1200,     -- 2x do 3★ (600)
 }
 
+-- XP dado quando consumido no Feed (4 = 15000)
+GokuStats.FeedXP = 15000
+
 return GokuStats

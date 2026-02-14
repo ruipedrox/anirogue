@@ -15,4 +15,8 @@ TemplateStats.Passives = {
     -- DamagePercent = 0,
 }
 
+-- XP dado quando este personagem é consumido no Feed
+-- Escala: 3★=5000, 4★=15000, 5★=50000, XP chars são muito mais valiosos
+TemplateStats.FeedXP = 5000
+
 return TemplateStats

@@ -9,4 +9,7 @@ GojoStats.Passives = {
 	Health = 3000,     -- ULTRA premium 5★
 }
 
+-- XP dado quando consumido no Feed (5 = 50000)
+GojoStats.FeedXP = 50000
+
 return GojoStats

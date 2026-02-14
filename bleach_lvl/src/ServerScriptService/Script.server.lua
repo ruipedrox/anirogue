@@ -2041,6 +2041,15 @@ buildAggregatedRunResult = function(plr)
 		end
 	end
 
+	-- 4) Add TotalDamage from RunTrack for missions tracking
+	local runTrack = plr:FindFirstChild("RunTrack")
+	if runTrack then
+		local dmgVal = runTrack:FindFirstChild("Damage")
+		if dmgVal and (dmgVal:IsA("NumberValue") or dmgVal:IsA("IntValue")) then
+			result.TotalDamage = tonumber(dmgVal.Value) or 0
+		end
+	end
+	
 	-- Normalize empty maps to nil (guard when CharacterXP is nil)
 	if type(result.CharacterXP) == "table" then
 		if next(result.CharacterXP) == nil then

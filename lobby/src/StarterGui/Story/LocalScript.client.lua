@@ -187,6 +187,10 @@ if container then
 	end
 end
 
+-- mode can be "Story" or "Infinite"; default = "Story"
+local activeMode = "Story"
+local overrideMapsList = nil -- optional maps provided by server
+
 local function openStoryUI()
 	if isOpen or isAnimating then return end
 	isAnimating = true
@@ -226,22 +230,31 @@ local function openStoryUI()
 				-- Ensure template stays hidden
 				template.Visible = false
 
-				-- Load all maps from Shared/Maps/Story
+				-- Load maps depending on active mode. For Infinite mode, use Shared/Maps/Infinite
 				local Shared = ReplicatedStorage:WaitForChild("Shared")
 				local Maps = Shared:WaitForChild("Maps")
-				local Story = Maps:WaitForChild("Story")
 				local mapsList = {}
-				for _, folder in ipairs(Story:GetChildren()) do
-					if folder:IsA("Folder") then
-						local mod = folder:FindFirstChild("Map")
-						if mod and mod:IsA("ModuleScript") then
-							local okMap, map = pcall(function() return require(mod) end)
-							if okMap and type(map) == "table" then
-								table.insert(mapsList, map)
+				if overrideMapsList and type(overrideMapsList) == "table" and #overrideMapsList > 0 then
+					mapsList = overrideMapsList
+				else
+					local containerFolderName = (activeMode == "Infinite") and "Infinite" or "Story"
+					local MapFolder = Maps:FindFirstChild(containerFolderName)
+					if MapFolder then
+						for _, folder in ipairs(MapFolder:GetChildren()) do
+							if folder:IsA("Folder") then
+								local mod = folder:FindFirstChild("Map")
+								if mod and mod:IsA("ModuleScript") then
+									local okMap, map = pcall(function() return require(mod) end)
+									if okMap and type(map) == "table" then
+										table.insert(mapsList, map)
+									end
+								end
 							end
 						end
 					end
 				end
+
+				-- close outer if/else for overrideMapsList
 
 				-- Sort by SortOrder (if provided), then by DisplayName/Id
 				table.sort(mapsList, function(a,b)
@@ -297,11 +310,19 @@ local function openStoryUI()
 					end
 				end
 
-				-- Create entries (only for unlocked maps)
+				-- Create entries (only for unlocked maps). For Infinite mode, show all maps.
 				for _, map in ipairs(mapsList) do
 					local unlocked, maxUnlocked = isMapUnlocked(map)
+					if activeMode == "Infinite" then
+						unlocked = true
+						if type(map.Levels) == "table" and #map.Levels > 0 then
+							maxUnlocked = #map.Levels
+						else
+							maxUnlocked = 1
+						end
+					end
 					if not unlocked then
-						-- Skip locked maps entirely
+						-- Skip locked maps entirely (Story mode)
 						continue
 					end
 					local item = template:Clone()
@@ -396,37 +417,65 @@ local function openStoryUI()
 										template.Visible = false
 
 										local function pushEntry(list, kind, amount, meta)
-											if not amount or amount <= 0 then return end
+											if amount == nil then return end
 											list[#list+1] = { kind = kind, amount = amount, meta = meta }
 										end
 
 										local entries = {}
 										local drops = mapTbl and mapTbl.Drops or nil
 										if drops then
-											local rep = drops.Repeat or {}
-											local fc = drops.FirstClear or {}
-											-- determine if first-clear rewards should apply for this selection
-											local firstApplies = false
-											local mapId = tostring(mapTbl.Id or mapTbl.DisplayName or "")
-											local prog = storyProgress and storyProgress.Maps and storyProgress.Maps[mapId]
-											local lvCompleted = (prog and prog.LevelsCompleted) or {}
-											local anyCompleted = false
-											for k, v in pairs(lvCompleted) do if v == true then anyCompleted = true break end end
-											if fc.PerLevel == true then
-												firstApplies = not (lvCompleted[levelIdx] == true)
+											-- If we're in Infinite mode and the map declares Milestone rewards, show those
+											if activeMode == "Infinite" and type(drops.Milestone) == "table" then
+												local m = drops.Milestone
+												local tierExample = 1 -- example for wave 10 (tier = 1)
+												local exampleGold = (tonumber(m.BaseGold) or 0) + (tierExample * (tonumber(m.GoldPerTier) or 0))
+												local exampleGems = (tonumber(m.BaseGems) or 0) + math.floor(tierExample * (tonumber(m.GemsPerTierFraction) or 0))
+												-- Gold and Gems examples (string so we can show formula)
+												-- Show icons only (no textual labels) for milestone rewards; example values kept in meta for possible tooltips
+												pushEntry(entries, "coins", "", { example = exampleGold })
+												pushEntry(entries, "gems", "", { example = exampleGems })
+												-- Character XP entries: show each XP unit as its own icon (if provided)
+												if type(m.CharacterXP) == "table" then
+													for _, cx in ipairs(m.CharacterXP) do
+														if type(cx) == "table" and cx.Id then
+															pushEntry(entries, "item", "", { id = tostring(cx.Id), chance = cx.Chance })
+														end
+													end
+												end
+												-- Evolve drops as item-like icon entries (no text)
+												if type(m.EvolveShard) == "table" then
+													pushEntry(entries, "item", "", { id = "evolve_shard" })
+												end
+												if type(m.EvolveCore) == "table" then
+													pushEntry(entries, "item", "", { id = "evolve_core" })
+												end
 											else
-												firstApplies = not anyCompleted
-											end
+												-- Existing Story-mode logic: FirstClear/Repeat/GuaranteedItemsPerRun
+												local rep = drops.Repeat or {}
+												local fc = drops.FirstClear or {}
+												-- determine if first-clear rewards should apply for this selection
+												local firstApplies = false
+												local mapId = tostring(mapTbl.Id or mapTbl.DisplayName or "")
+												local prog = storyProgress and storyProgress.Maps and storyProgress.Maps[mapId]
+												local lvCompleted = (prog and prog.LevelsCompleted) or {}
+												local anyCompleted = false
+												for k, v in pairs(lvCompleted) do if v == true then anyCompleted = true break end end
+												if fc.PerLevel == true then
+													firstApplies = not (lvCompleted[levelIdx] == true)
+												else
+													firstApplies = not anyCompleted
+												end
 
-											local gemsAmt = tonumber((firstApplies and fc.Gems) or rep.Gems) or 0
-											local goldAmt = tonumber((firstApplies and (fc.Gold or fc.Coins)) or (rep.Gold or rep.Coins)) or 0
-											-- order rule: gems then coins, then others
-											pushEntry(entries, "gems", gemsAmt)
-											pushEntry(entries, "coins", goldAmt)
-											local items = drops.GuaranteedItemsPerRun or {}
-											for _, it in ipairs(items) do
-												local qty = tonumber(it.Quantity) or 0
-												pushEntry(entries, "item", qty, { id = tostring(it.Id or "") })
+												local gemsAmt = tonumber((firstApplies and fc.Gems) or rep.Gems) or 0
+												local goldAmt = tonumber((firstApplies and (fc.Gold or fc.Coins)) or (rep.Gold or rep.Coins)) or 0
+												-- order rule: gems then coins, then others
+												pushEntry(entries, "gems", gemsAmt)
+												pushEntry(entries, "coins", goldAmt)
+												local items = drops.GuaranteedItemsPerRun or {}
+												for _, it in ipairs(items) do
+													local qty = tonumber(it.Quantity) or 0
+													pushEntry(entries, "item", qty, { id = tostring(it.Id or "") })
+												end
 											end
 										end
 
@@ -522,6 +571,17 @@ local function openStoryUI()
 				warn("[StoryUI] populateStoryMaps error:", tostring(err))
 			end
 		end
+
+		-- Diagnostic: if we were opened with an override maps list, log a short summary
+		pcall(function()
+			if overrideMapsList and type(overrideMapsList) == "table" then
+				print(string.format("[StoryUI] overrideMapsList received, count=%d", #overrideMapsList))
+				local first = overrideMapsList[1]
+				if first then
+					print("[StoryUI] overrideMapsList[1] fields:", tostring(first.Id), tostring(first.DisplayName), tostring(first.PreviewImage), tostring((first.Levels and #first.Levels) or 0))
+				end
+			end
+		end)
 		populateStoryMaps()
 
 		if container:IsA("Frame") then
@@ -636,7 +696,23 @@ end
 task.spawn(keepReady)
 
 openRemote.OnClientEvent:Connect(function(payload)
-	if payload == "Story" then
+	-- payload may be a string or a table { mode = "Infinite", maps = {...} }
+	if type(payload) == "string" then
+		if payload == "Story" then
+			activeMode = "Story"
+			overrideMapsList = nil
+			receivedEvent = true
+			openStoryUI()
+		elseif payload == "Infinite" then
+			activeMode = "Infinite"
+			overrideMapsList = nil
+			receivedEvent = true
+			openStoryUI()
+		end
+	elseif type(payload) == "table" then
+		-- accept { mode = "Infinite"/"Story", maps = {...} }
+		if payload.mode then activeMode = tostring(payload.mode) end
+		overrideMapsList = payload.maps or nil
 		receivedEvent = true
 		openStoryUI()
 	end

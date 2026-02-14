@@ -1,0 +1,359 @@
+-- Cloner Alien AI: melee enemy that spawns 3 clones on death
+-- Clones have different stat multipliers (70%, 110%, 150%) and cannot clone themselves
+
+local Players = game:GetService("Players")
+local ReplicatedStorage = game:GetService("ReplicatedStorage")
+local CollectionService = game:GetService("CollectionService")
+
+local RANGE = 3
+local COOLDOWN = 0.5
+local DEFAULT_DAMAGE = 10
+
+local enemyModel = script.Parent
+
+local humanoid = enemyModel:FindFirstChildOfClass("Humanoid") or enemyModel:WaitForChild("Humanoid", 2)
+if not humanoid then return end
+
+local root = enemyModel.PrimaryPart or enemyModel:FindFirstChild("HumanoidRootPart") or (enemyModel:WaitForChild("HumanoidRootPart", 2))
+if not root then return end
+
+-- Load attack animation only
+local attackTrack
+local animFolder = enemyModel:FindFirstChild("Animation")
+if animFolder and humanoid then
+	local atkAnim = animFolder:FindFirstChild("Attack")
+	if atkAnim and atkAnim:IsA("Animation") then
+		attackTrack = humanoid:LoadAnimation(atkAnim)
+		attackTrack.Looped = false
+	end
+end
+
+-- Carrega apenas o Stats direto deste inimigo (sem fallback genérico)
+local BASE_STATS do
+	local statsModule = enemyModel:FindFirstChild("Stats")
+	if statsModule and statsModule:IsA("ModuleScript") then
+		local ok, data = pcall(require, statsModule)
+		if ok and type(data) == "table" then
+			BASE_STATS = data
+		end
+	end
+end
+
+-- Anti-clump parameters
+local FORMATION_RADIUS_MIN = 2.5
+local FORMATION_RADIUS_MAX = 4.0
+local SEPARATION_RADIUS = 3.5
+local SEPARATION_FORCE = 2.0
+
+local lastHitTimes = setmetatable({}, { __mode = "k" })
+
+-- Each enemy keeps its own formation offset around the player to avoid everyone stacking same point
+local angle = math.random() * math.pi * 2
+local radius = FORMATION_RADIUS_MIN + math.random() * (FORMATION_RADIUS_MAX - FORMATION_RADIUS_MIN)
+local formationOffset = Vector3.new(math.cos(angle), 0, math.sin(angle)) * radius
+
+local function isAlive(h)
+	return h and h.Health > 0
+end
+
+local cachedDamage
+local lastDamageCheck = 0
+local DAMAGE_REFRESH_INTERVAL = 1.0
+
+local function computeBaseDamage()
+	-- Apply StatMultiplier if this is a clone
+	local statMult = enemyModel:GetAttribute("StatMultiplier") or 1
+
+	local base
+	if BASE_STATS and typeof(BASE_STATS.Damage) == "number" and BASE_STATS.Damage > 0 then
+		base = BASE_STATS.Damage
+	else
+		local attBase = enemyModel:GetAttribute("BaseDamage")
+		if typeof(attBase) == "number" and attBase > 0 then
+			base = attBase
+		else
+			local legacy = enemyModel:GetAttribute("Damage")
+			if typeof(legacy) == "number" and legacy > 0 then
+				base = legacy
+			end
+		end
+	end
+	base = base or DEFAULT_DAMAGE
+
+	-- Apply clone multiplier
+	base = base * statMult
+
+	local waveMult = enemyModel:GetAttribute("DamageWaveMultiplier")
+	if typeof(waveMult) ~= "number" or waveMult <= 0 then waveMult = 1 end
+	return base * waveMult
+end
+
+local function getDamage(now)
+	now = now or os.clock()
+	if not cachedDamage or (now - lastDamageCheck) >= DAMAGE_REFRESH_INTERVAL then
+		cachedDamage = computeBaseDamage()
+		lastDamageCheck = now
+	end
+	return cachedDamage
+end
+
+-- Immediate refresh when WaveManager (or other code) changes Damage attribute
+pcall(function()
+	enemyModel:GetAttributeChangedSignal("Damage"):Connect(function()
+		cachedDamage = computeBaseDamage()
+		lastDamageCheck = os.clock()
+	end)
+end)
+
+local function getInvTimeSeconds(player)
+	-- Reads final stat 'invtime' from player.Stats (NumberValue)
+	if not player then return 0 end
+	local stats = player:FindFirstChild("Stats")
+	if not stats then return 0 end
+	local nv = stats:FindFirstChild("invtime")
+	if nv and nv:IsA("NumberValue") then
+		return math.max(0, nv.Value)
+	end
+	return 0
+end
+
+local function isInvulnerable(character, now)
+	if not character then return false end
+	local untilTs = character:GetAttribute("InvulnerableUntil")
+	if typeof(untilTs) == "number" and now < untilTs then
+		return true
+	end
+	return false
+end
+
+local running = true
+
+-- Pause handling: fully freeze/unfreeze enemy on global pause
+local pauseApplied = false
+local savedWalkSpeed, savedJumpPower, savedAutoRotate
+local function applyPauseState(paused)
+	if not humanoid or not root then return end
+	if paused then
+		if not pauseApplied then
+			savedWalkSpeed = humanoid.WalkSpeed
+			savedJumpPower = humanoid.JumpPower
+			savedAutoRotate = humanoid.AutoRotate
+			pauseApplied = true
+		end
+		humanoid.WalkSpeed = 0
+		humanoid.JumpPower = 0
+		humanoid.AutoRotate = false
+		-- Stop current motion
+		pcall(function()
+			humanoid:Move(Vector3.zero)
+			humanoid:ChangeState(Enum.HumanoidStateType.Physics)
+		end)
+		if root and root:IsA("BasePart") then
+			root.AssemblyLinearVelocity = Vector3.new()
+			root.AssemblyAngularVelocity = Vector3.new()
+		end
+	else
+		if pauseApplied then
+			-- Restore prior settings
+			humanoid.WalkSpeed = savedWalkSpeed or 16
+			humanoid.JumpPower = savedJumpPower or 50
+			humanoid.AutoRotate = (savedAutoRotate == nil) and true or savedAutoRotate
+			pcall(function()
+				humanoid:ChangeState(Enum.HumanoidStateType.Running)
+			end)
+			pauseApplied = false
+		end
+	end
+end
+
+-- Clone spawning on death (only if this is NOT already a clone)
+local function spawnClone(statMultiplier)
+	local clone = enemyModel:Clone()
+	clone:SetAttribute("IsClone", true)
+	clone:SetAttribute("StatMultiplier", statMultiplier)
+	clone:SetAttribute("IsEnemy", true)
+	clone:SetAttribute("EnemyId", "cloner_alien")
+
+	-- Get base health from the original enemy's attributes (set by WaveManager)
+	local baseHealth = enemyModel:GetAttribute("BaseHP") or enemyModel:GetAttribute("Health") or 180
+	local cloneHum = clone:FindFirstChildOfClass("Humanoid")
+	
+	if cloneHum then
+		local cloneMaxHealth = baseHealth * statMultiplier
+		cloneHum.MaxHealth = cloneMaxHealth
+		cloneHum.Health = cloneMaxHealth
+		print(string.format("[Cloner] Clone created with %.0f%% stats: BaseHP=%d, MaxHealth=%d, Health=%d", 
+			statMultiplier * 100, baseHealth, cloneMaxHealth, cloneHum.Health))
+	else
+		print(string.format("[Cloner] WARNING: Clone has no Humanoid!"))
+		return
+	end
+
+	-- Position clone near original with random offset to prevent stacking
+	local offsetX = math.random(-5, 5)
+	local offsetZ = math.random(-5, 5)
+	local spawnPos = root.Position + Vector3.new(offsetX, 0, offsetZ)
+
+	-- Parent to workspace first
+	clone.Parent = workspace
+	print(string.format("[Cloner] Clone parented to workspace at position %s", tostring(spawnPos)))
+
+	-- Set position after parenting
+	local cloneRoot = clone.PrimaryPart or clone:FindFirstChild("HumanoidRootPart")
+	if cloneRoot then
+		clone:PivotTo(CFrame.new(spawnPos))
+	end
+
+	-- Tag as enemy so WaveManager can track it
+	CollectionService:AddTag(clone, "Enemy")
+	
+	-- Verify clone is alive after creation (non-blocking)
+	task.spawn(function()
+		task.wait(0.1)
+		if cloneHum then
+			print(string.format("[Cloner] Clone health after 0.1s: %d/%d, Parent=%s", cloneHum.Health, cloneHum.MaxHealth, tostring(clone.Parent)))
+		end
+	end)
+end
+
+-- Stop when enemy dies or is removed
+local clonesSpawned = false
+local function trySpawnClones()
+	if clonesSpawned then return end
+	clonesSpawned = true
+	running = false
+
+	-- Spawn 3 clones only if this is the original (not a clone)
+	if not enemyModel:GetAttribute("IsClone") then
+		print(string.format("[Cloner] Spawning 3 clones for %s at position %s", enemyModel.Name, tostring(root.Position)))
+		spawnClone(0.7)  -- 70% stats (126 HP)
+		spawnClone(1.1)  -- 110% stats (198 HP)
+		spawnClone(1.5)  -- 150% stats (270 HP)
+		print("[Cloner] All 3 clones spawned successfully")
+	else
+		print(string.format("[Cloner] %s is a clone, not spawning more clones", enemyModel.Name))
+	end
+end
+
+-- Use HealthChanged instead of Died to spawn clones BEFORE cleanup code destroys the model
+if humanoid then
+	humanoid.HealthChanged:Connect(function(health)
+		if health <= 0 and not clonesSpawned then
+			trySpawnClones()
+		end
+	end)
+end
+
+enemyModel.AncestryChanged:Connect(function(_, parent)
+	if not parent then running = false end
+end)
+
+task.spawn(function()
+	-- Movement loop
+	while running do
+		if ReplicatedStorage:GetAttribute("GamePaused") then
+			applyPauseState(true)
+			task.wait(0.05)
+			continue
+		else
+			applyPauseState(false)
+		end
+		-- Determine desired move speed from attributes/stats
+		local moveSpeed = enemyModel:GetAttribute("MoveSpeed")
+		if typeof(moveSpeed) ~= "number" or moveSpeed <= 0 then
+			-- Fallback to Humanoid.WalkSpeed if not provided
+			moveSpeed = (humanoid and humanoid.WalkSpeed) or 16
+		end
+		if humanoid then humanoid.WalkSpeed = moveSpeed end
+
+		-- Find nearest alive player to chase
+		local bestPlr, bestDist, bestPos
+		for _, plr in ipairs(Players:GetPlayers()) do
+			local char = plr.Character
+			local phum = char and char:FindFirstChildOfClass("Humanoid")
+			local proot = char and char:FindFirstChild("HumanoidRootPart")
+			if proot and phum and phum.Health > 0 then
+				local d = (proot.Position - root.Position).Magnitude
+				if not bestDist or d < bestDist then
+					bestDist = d
+					bestPlr = plr
+					bestPos = proot.Position
+				end
+			end
+		end
+
+		if bestPos and humanoid then
+			-- Separation steering from nearby enemies to reduce clumping
+			local sep = Vector3.zero
+			local processed = 0
+			for _, other in ipairs(CollectionService:GetTagged("Enemy")) do
+				if other ~= enemyModel and other.Parent then
+					local oroot = other.PrimaryPart or other:FindFirstChild("HumanoidRootPart")
+					if oroot then
+						local delta = root.Position - oroot.Position
+						local dist = delta.Magnitude
+						if dist > 0.001 and dist < SEPARATION_RADIUS then
+							local push = (SEPARATION_RADIUS - dist) / SEPARATION_RADIUS
+							sep += (delta.Unit * push)
+							processed += 1
+							if processed >= 10 then break end -- cap cost
+						end
+					end
+				end
+			end
+			if sep.Magnitude > 0 then
+				sep = sep.Unit * SEPARATION_FORCE
+			end
+
+			-- Target a position around the player instead of exact center
+			local desired = bestPos + formationOffset + sep
+			humanoid:MoveTo(desired)
+		end
+
+		task.wait(0.25) -- update path/target 4x per second
+	end
+end)
+
+task.spawn(function()
+	while running do
+		if ReplicatedStorage:GetAttribute("GamePaused") then
+			applyPauseState(true)
+			task.wait(0.05)
+			continue
+		else
+			applyPauseState(false)
+		end
+		-- Contact damage loop
+		local now = os.clock()
+		local epos = root.Position
+		local dmg = getDamage(now)
+
+		for _, plr in ipairs(Players:GetPlayers()) do
+			local char = plr.Character
+			local phum = char and char:FindFirstChildOfClass("Humanoid")
+			local proot = char and char:FindFirstChild("HumanoidRootPart")
+			if proot and isAlive(phum) then
+				local dist = (proot.Position - epos).Magnitude
+				if dist <= RANGE then
+					-- Global invulnerability window based on player's final stat 'invtime'
+					if isInvulnerable(char, now) then
+						continue
+					end
+					local last = lastHitTimes[plr] or 0
+					if now - last >= COOLDOWN then
+						lastHitTimes[plr] = now
+						phum:TakeDamage(dmg)
+						-- Apply invulnerability frames
+						local invs = getInvTimeSeconds(plr)
+						if invs > 0 then
+							char:SetAttribute("InvulnerableUntil", now + invs)
+						end
+					end
+				end
+			end
+		end
+		task.wait(0.1)
+	end
+end)
+
+return true

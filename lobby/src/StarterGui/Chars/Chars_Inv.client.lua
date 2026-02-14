@@ -48,6 +48,13 @@ end
 local invSpaceText = invSpaceFrame:FindFirstChild("Space_text", true) or invSpaceFrame:FindFirstChild("SpaceText", true) or invSpaceFrame:FindFirstChild("Space", true)
 local scrolling = invFrame:WaitForChild("ScrollingFrame")
 local template = scrolling:WaitForChild("inv_icon")
+-- Remover template do ScrollingFrame para que o UIListLayout não reserve espaço para ele
+pcall(function()
+	if template and template.Parent == scrolling then
+		template.Parent = rootGui
+		template.Visible = false
+	end
+end)
 
 -- Preview UI referências
 local preview = frame:WaitForChild("Prev")
@@ -62,6 +69,7 @@ local equipButton = previewInner:FindFirstChild("Equip_b")
 local unequipButton = previewInner:FindFirstChild("Unequip_b")
 local cardButton = previewInner:FindFirstChild("Card_b") -- novo botão para abrir UI de cartas
 local sellButton = previewInner:FindFirstChild("Sell_b") -- botão de vender
+local feedButton = previewInner:FindFirstChild("Feed_b")
 
 -- Painel de upgrade de espaço (Space_up)
 local spacePanel = frame:FindFirstChild("Space_up") or rootGui:FindFirstChild("Space_up")
@@ -211,6 +219,93 @@ local selectedInstanceId = nil
 local currentSelectedIcon = nil -- para destaque visual
 local equippedSet = nil -- cache para lookup O(1)
 
+-- Select-mode state for multi-select sell
+local selectMode = false
+local selectedForSell = {} -- map id -> true
+-- Try to find the Select button frame; the clickable TextButton is often a child
+local selectButton = frame:FindFirstChild("Select_button") or frame:FindFirstChild("Select") or rootGui:FindFirstChild("Select_button") or rootGui:FindFirstChild("Select")
+
+local function getSelectClickable()
+	if not selectButton then return nil end
+	if selectButton:IsA("TextButton") or selectButton:IsA("ImageButton") then return selectButton end
+	-- prefer named child "Select" or any TextButton/ImageButton inside
+	local named = selectButton:FindFirstChild("Select") or selectButton:FindFirstChild("Select_b") or selectButton:FindFirstChildWhichIsA("TextButton") or selectButton:FindFirstChildWhichIsA("ImageButton")
+	if named and (named:IsA("TextButton") or named:IsA("ImageButton")) then return named end
+	-- fallback: search descendants for a text-holding label
+	for _, d in ipairs(selectButton:GetDescendants()) do
+		if d:IsA("TextButton") or d:IsA("ImageButton") then return d end
+	end
+	return nil
+end
+
+local function setSelectButtonText(txt)
+	local btn = getSelectClickable()
+	if btn then
+		pcall(function() btn.Text = txt end)
+		return
+	end
+	if not selectButton then return end
+	-- fallback: try to write to any descendant label
+	for _, d in ipairs(selectButton:GetDescendants()) do
+		if d:IsA("TextLabel") or d:IsA("TextButton") then
+			pcall(function() d.Text = txt end)
+			return
+		end
+	end
+end
+
+-- Initialize select button text and hook up click handler
+-- Initialize select button text and hook up click handler (moved later)
+
+local function applySelectionOverlayToIcon(iconFrame, enabled)
+	if not iconFrame then return end
+	local overlay = iconFrame:FindFirstChild("SelectOverlay")
+	if enabled then
+		if not overlay then
+			overlay = Instance.new("Frame")
+			overlay.Name = "SelectOverlay"
+			overlay.AnchorPoint = Vector2.new(1,0)
+			overlay.Size = UDim2.fromScale(0.28, 0.28)
+			overlay.Position = UDim2.new(1, -2, 0, 2)
+			overlay.BackgroundTransparency = 1
+			overlay.ZIndex = 130
+			-- create shadowed letter S
+			local function createShadow(offsetX, offsetY)
+				local s = Instance.new("TextLabel")
+				s.Name = "S"
+				s.AnchorPoint = Vector2.new(0.5,0.5)
+				s.Position = UDim2.new(0.5, offsetX, 0.5, offsetY)
+				s.Size = UDim2.fromScale(1,1)
+				s.BackgroundTransparency = 1
+				s.Text = "S"
+				s.Font = Enum.Font.FredokaOne
+				s.TextScaled = true
+				s.TextColor3 = Color3.new(0,0,0)
+				s.ZIndex = 131
+				s.Parent = overlay
+			end
+			local offsets = { {-2,0},{2,0},{0,-2},{0,2},{-2,-2},{2,-2},{-2,2},{2,2} }
+			for _, off in ipairs(offsets) do createShadow(off[1], off[2]) end
+			local main = Instance.new("TextLabel")
+			main.Name = "Main"
+			main.AnchorPoint = Vector2.new(0.5,0.5)
+			main.Position = UDim2.new(0.5,0,0.5,0)
+			main.Size = UDim2.fromScale(1,1)
+			main.BackgroundTransparency = 1
+			main.Text = "S"
+			main.Font = Enum.Font.FredokaOne
+			main.TextScaled = true
+			main.TextColor3 = Color3.fromRGB(40,180,255)
+			main.ZIndex = 132
+			main.Parent = overlay
+			overlay.Parent = iconFrame
+		end
+		overlay.Visible = true
+	else
+		if overlay then overlay.Visible = false end
+	end
+end
+
 -- Wrapper mais robusto que recalcula se necessário e faz fallback à lista
 local function computeIsEquipped(id)
 	if not id then return false end
@@ -246,6 +341,122 @@ local function isInstanceEquipped(id)
 	if not id then return false end
 	if not equippedSet then rebuildEquippedSet() end
 	return equippedSet[id] == true
+end
+
+-- Now initialize the select button hookup after helpers are defined
+setSelectButtonText("Select")
+local selectClickable = getSelectClickable()
+-- forward declare multi-sell opener so click handlers can reference it before it's defined later
+local openMultiSellConfirm
+-- Try to find the top-level sell button frame named exactly "Sell_Button"
+-- Use exact top-level frame name `Sell_Button`
+-- Robustly find the top-level Sell frame (many UIs use slightly different names)
+local function findTopSellFrame()
+	local candidates = {"Sell_Button", "Sell_button", "Sell", "SellButton", "Sell_B"}
+	for _, name in ipairs(candidates) do
+		local f = frame:FindFirstChild(name) or rootGui:FindFirstChild(name)
+		if f and f:IsA("GuiObject") then return f end
+	end
+	-- fallback: look for any Frame under frame/rootGui that contains a TextButton named "Sell"
+	local function scan(parent)
+		for _, child in ipairs(parent:GetChildren()) do
+			if child:IsA("Frame") then
+				local inner = child:FindFirstChild("Sell") or child:FindFirstChildWhichIsA("TextButton")
+				if inner and inner:IsA("TextButton") then
+					return child
+				end
+			end
+		end
+		return nil
+	end
+	local found = scan(frame) or scan(rootGui)
+	return found
+end
+local topSellFrame = findTopSellFrame()
+if topSellFrame and topSellFrame:IsA("GuiObject") then
+	pcall(function() topSellFrame.Visible = false end)
+end
+
+-- helper to find inner clickable of top sell frame (used regardless of select button presence)
+local function getInnerClickable(parent)
+	if not parent then return nil end
+	if parent:IsA("TextButton") or parent:IsA("ImageButton") then return parent end
+	local named = parent:FindFirstChild("Sell") or parent:FindFirstChild("Sell_b") or parent:FindFirstChildWhichIsA("TextButton") or parent:FindFirstChildWhichIsA("ImageButton")
+	if named and (named:IsA("TextButton") or named:IsA("ImageButton")) then return named end
+	for _, d in ipairs(parent:GetDescendants()) do
+		if d:IsA("TextButton") or d:IsA("ImageButton") then return d end
+	end
+	return nil
+end
+local function attachTopSellHandler()
+	if not topSellFrame then
+		local RunService = game:GetService("RunService")
+		if RunService:IsStudio() then warn("[CharsUI] top Sell frame not found") end
+		return
+	end
+	-- Prefer explicit child named 'Sell' (TextButton), then any direct TextButton/ImageButton, then descendants
+	local btn = topSellFrame:FindFirstChild("Sell") or topSellFrame:FindFirstChildWhichIsA("TextButton") or topSellFrame:FindFirstChildWhichIsA("ImageButton")
+	if not btn then
+		for _, d in ipairs(topSellFrame:GetDescendants()) do
+			if d:IsA("TextButton") or d:IsA("ImageButton") then
+				btn = d
+				break
+			end
+		end
+	end
+	if btn and (btn:IsA("TextButton") or btn:IsA("ImageButton")) then
+		-- connect safely
+		btn.MouseButton1Click:Connect(function()
+			local ids = {}
+			for id, v in pairs(selectedForSell) do if v then table.insert(ids, id) end end
+			if #ids == 0 then
+				warn("[CharsUI] No characters selected for multi-sell")
+				return
+			end
+			openMultiSellConfirm(ids)
+		end)
+	else
+		local RunService = game:GetService("RunService")
+		if RunService:IsStudio() then warn("[CharsUI] top Sell_Button clickable not found") end
+	end
+end
+attachTopSellHandler()
+local function exitSelectMode()
+	if not selectMode then return end
+	selectMode = false
+	for id, _ in pairs(selectedForSell) do
+		local f = scrolling:FindFirstChild(id)
+		if f then pcall(function() applySelectionOverlayToIcon(f, false) end) end
+	end
+	selectedForSell = {}
+	setSelectButtonText("Select")
+	if topSellFrame and topSellFrame:IsA("GuiObject") then pcall(function() topSellFrame.Visible = false end) end
+end
+if selectClickable then
+	pcall(function()
+		selectClickable.MouseButton1Click:Connect(function()
+			if not selectMode then
+					-- Enter select mode: don't auto-select; allow player to pick
+					selectMode = true
+					selectedForSell = {}
+					-- show cancel text with zero selected
+					setSelectButtonText("Cancel (0)")
+				if topSellFrame and topSellFrame:IsA("GuiObject") then pcall(function() topSellFrame.Visible = true end) end
+			else
+				-- Exit select mode: clear overlays
+				selectMode = false
+				for id, _ in pairs(selectedForSell) do
+					local f = scrolling:FindFirstChild(id)
+					if f then applySelectionOverlayToIcon(f, false) end
+				end
+				selectedForSell = {}
+				setSelectButtonText("Select")
+				if topSellFrame and topSellFrame:IsA("GuiObject") then pcall(function() topSellFrame.Visible = false end) end
+			end
+		end)
+	end)
+else
+	warn("[CharsUI] Select clickable button not found inside Select_button frame")
 end
 
 -- Paleta por número de estrelas (mover para antes de updatePreview para evitar nil)
@@ -456,6 +667,87 @@ if unequipButton and unequipButton:IsA("ImageButton") and UnequipOneRE then
 	end)
 end
 
+-- Feed button: open Feed UI and set the main to the currently previewed character
+if feedButton then
+	local Players = game:GetService("Players")
+	local player = Players.LocalPlayer
+	local function handleFeedClick()
+		print("[CharsUI] Feed button clicked. selectedInstanceId=", tostring(selectedInstanceId))
+		if not selectedInstanceId then
+			warn("[CharsUI] Feed clicked but no character selected")
+			return
+		end
+		local pg = player and player:FindFirstChild("PlayerGui") or player:WaitForChild("PlayerGui")
+		if not pg then
+			warn("[CharsUI] PlayerGui not found")
+			return
+		end
+		-- diagnostic: list top-level children names
+		local names = {}
+		for _, c in ipairs(pg:GetChildren()) do table.insert(names, c.Name) end
+		print("[CharsUI] PlayerGui children:", table.concat(names, ","))
+
+		-- prefer an explicit ScreenGui named 'Feed'
+		local feedGui = pg:FindFirstChild("Feed") or pg:FindFirstChild("Feed", true)
+		if not feedGui then
+			-- fallback: find any ScreenGui with 'feed' in the name
+			for _, g in ipairs(pg:GetChildren()) do
+				if g:IsA("ScreenGui") then
+					local lname = tostring(g.Name):lower()
+					if string.find(lname, "feed") then
+						feedGui = g
+						break
+					end
+				end
+			end
+		end
+
+		print("[CharsUI] feedGui resolved ->", tostring(feedGui))
+		if feedGui then
+			local f = feedGui:FindFirstChild("Frame") or feedGui:FindFirstChildWhichIsA("Frame", true)
+			print("[CharsUI] feed frame ->", tostring(f))
+			if f and f:IsA("GuiObject") then
+				f.Visible = true
+			end
+			-- Prefer using a BindableEvent named 'SetMain' under the Feed ScreenGui so
+			-- the Feed LocalScript can receive the selected id directly (no GUI property).
+			local setMainEvent = feedGui:FindFirstChild("SetMain")
+			if setMainEvent and setMainEvent:IsA("BindableEvent") then
+				-- try to include a ready-to-use icon asset if we have the enriched instance
+				local iconAsset = nil
+				local stars = nil
+				local level = nil
+				local xp = nil
+				local inst = currentInventory and currentInventory.Instances and currentInventory.Instances[selectedInstanceId]
+				if inst and inst.Catalog then
+					iconAsset = inst.Catalog.icon_id
+					stars = inst.Catalog.stars
+					level = inst.Level
+					xp = inst.XP
+				end
+				pcall(function() setMainEvent:Fire(selectedInstanceId, iconAsset, stars, level, xp) end)
+			else
+				-- Fallback: set attribute on the ScreenGui so older code still works
+				local ok, err = pcall(function() feedGui:SetAttribute("FeedMain", selectedInstanceId) end)
+				if not ok then warn("[CharsUI] failed to set FeedMain attr:", err) end
+			end
+		else
+			warn("[CharsUI] Feed GUI not found in PlayerGui")
+		end
+	end
+
+	if feedButton:IsA("ImageButton") then
+		feedButton.MouseButton1Click:Connect(handleFeedClick)
+	else
+		-- ImageLabel fallback: listen for input
+		feedButton.InputBegan:Connect(function(input)
+			if input.UserInputType == Enum.UserInputType.MouseButton1 then
+				handleFeedClick()
+			end
+		end)
+	end
+end
+
 -- Configuração de venda
 local function goldForStars(stars)
 	-- Use fixed rarity mapping requested by the user:
@@ -470,6 +762,7 @@ local function goldForStars(stars)
 end
 
 local pendingSellId = nil
+local pendingSellIds = nil -- table of ids when multi-sell
 local function openSellConfirm(inst)
 	if not sellPanel or not inst then return end
 	if sellAnimating then return end
@@ -517,6 +810,43 @@ local function openSellConfirm(inst)
 	-- Texto 2: Valor em gold
 	if sellText2 and sellText2:IsA("TextLabel") then
 		sellText2.Text = goldDisplay
+	end
+end
+
+openMultiSellConfirm = function(ids)
+	if not sellPanel or not ids or #ids == 0 then return end
+	if sellAnimating then return end
+	-- compute total gold
+	local total = 0
+	for _, id in ipairs(ids) do
+		local inst = currentInventory and currentInventory.Instances and currentInventory.Instances[id]
+		if inst then
+			local cat = inst.Catalog or {}
+			local stars = cat.stars or 0
+			total = total + goldForStars(stars)
+		end
+	end
+	pendingSellIds = ids
+	pendingSellId = nil
+	sellPanel.Visible = true
+	-- animate like openSellConfirm
+	local finalPos = sellPanel.Position
+	local absY = sellPanel.AbsoluteSize.Y
+	if absY == 0 then task.wait() absY = sellPanel.AbsoluteSize.Y end
+	if absY == 0 then absY = 300 end
+	local startPos = UDim2.new(finalPos.X.Scale, finalPos.X.Offset, -1, -absY)
+	sellPanel.Position = startPos
+	sellAnimating = true
+	pcall(function()
+		TweenService:Create(sellPanel, TweenInfo.new(0.30, Enum.EasingStyle.Quad, Enum.EasingDirection.Out), { Position = finalPos }):Play()
+	end)
+	task.delay(0.32, function() sellAnimating = false end)
+	-- texts
+	if sellText1 and sellText1:IsA("TextLabel") then
+		sellText1.Text = string.format("Do you want to sell %d characters for", #ids)
+	end
+	if sellText2 and sellText2:IsA("TextLabel") then
+		sellText2.Text = string.format("%d coins", total)
 	end
 end
 
@@ -599,117 +929,165 @@ end
 
 if sellYesButton and sellYesButton:IsA("ImageButton") then
     sellYesButton.MouseButton1Click:Connect(function()
-        if not pendingSellId then return end
-        if not SellCharacterRE then
-            warn("[CharsUI] Remote SellCharacter não encontrado")
-            closeSellConfirm()
-            return
-        end
-        local sellingId = pendingSellId -- guardar antes de fechar (closeSellConfirm zera)
-        print("[CharsUI] Pedido venda personagem ->", sellingId)
-        SellCharacterRE:FireServer(sellingId)
-        closeSellConfirm()
-        -- Optimistic UI update segura usando sellingId
+		-- Multi-sell path
+		if pendingSellIds and type(pendingSellIds) == "table" and #pendingSellIds > 0 then
+			if not SellCharacterRE then
+				warn("[CharsUI] Remote SellCharacter não encontrado")
+				closeSellConfirm()
+				pendingSellIds = nil
+				return
+			end
+			local ids = pendingSellIds
+			pendingSellIds = nil
+			-- Fire server for each id (server may support batch in future)
+			for _, sellingId in ipairs(ids) do
+				if sellingId and type(sellingId) == "string" then
+					print("[CharsUI] Pedido venda personagem ->", sellingId)
+					pcall(function() SellCharacterRE:FireServer(sellingId) end)
+					-- Optimistic UI update per id
+					if currentInventory and currentInventory.Instances and currentInventory.Instances[sellingId] then
+						currentInventory.Instances[sellingId] = nil
+						if currentInventory.OrderedList then
+							for i = #currentInventory.OrderedList, 1, -1 do
+								local inst = currentInventory.OrderedList[i]
+								if inst and inst.Id == sellingId then
+									table.remove(currentInventory.OrderedList, i)
+									break
+								end
+							end
+						end
+						if currentInventory.CurrentCount and currentInventory.CurrentCount > 0 then
+							currentInventory.CurrentCount -= 1
+						else
+							local c = 0
+							for _ in pairs(currentInventory.Instances) do c += 1 end
+							currentInventory.CurrentCount = c
+						end
+						local iconFrame = scrolling:FindFirstChild(sellingId)
+						if iconFrame then iconFrame:Destroy() end
+					end
+				end
+			end
+			-- clear selection overlays and state
+			for id, _ in pairs(selectedForSell) do
+				local f = scrolling:FindFirstChild(id)
+				if f then applySelectionOverlayToIcon(f, false) end
+			end
+			selectedForSell = {}
+			selectMode = false
+			setSelectButtonText("Select")
+			if topSellFrame and topSellFrame:IsA("GuiObject") then pcall(function() topSellFrame.Visible = false end) end
+			updateInvSpaceLabel()
+			closeSellConfirm()
+			return
+		end
+
+		-- Single-sell path (legacy)
+		if not pendingSellId then return end
+		if not SellCharacterRE then
+			warn("[CharsUI] Remote SellCharacter não encontrado")
+			closeSellConfirm()
+			return
+		end
+		local sellingId = pendingSellId -- guardar antes de fechar (closeSellConfirm zera)
+		print("[CharsUI] Pedido venda personagem ->", sellingId)
+		SellCharacterRE:FireServer(sellingId)
+		closeSellConfirm()
+		-- Optimistic UI update segura usando sellingId
 		if currentInventory and currentInventory.Instances and currentInventory.Instances[sellingId] then
-            currentInventory.Instances[sellingId] = nil
-            if currentInventory.OrderedList then
-                for i = #currentInventory.OrderedList, 1, -1 do
-                    local inst = currentInventory.OrderedList[i]
-                    if inst and inst.Id == sellingId then
-                        table.remove(currentInventory.OrderedList, i)
-                        break
-                    end
-                end
-            end
-            if currentInventory.CurrentCount and currentInventory.CurrentCount > 0 then
-                currentInventory.CurrentCount -= 1
-            else
-                local c = 0
-                for _ in pairs(currentInventory.Instances) do c += 1 end
-                currentInventory.CurrentCount = c
-            end
-            local iconFrame = scrolling:FindFirstChild(sellingId)
-            if iconFrame then iconFrame:Destroy() end
-            updateInvSpaceLabel()
-        end
+			currentInventory.Instances[sellingId] = nil
+			if currentInventory.OrderedList then
+				for i = #currentInventory.OrderedList, 1, -1 do
+					local inst = currentInventory.OrderedList[i]
+					if inst and inst.Id == sellingId then
+						table.remove(currentInventory.OrderedList, i)
+						break
+					end
+				end
+			end
+			if currentInventory.CurrentCount and currentInventory.CurrentCount > 0 then
+				currentInventory.CurrentCount -= 1
+			else
+				local c = 0
+				for _ in pairs(currentInventory.Instances) do c += 1 end
+				currentInventory.CurrentCount = c
+			end
+			local iconFrame = scrolling:FindFirstChild(sellingId)
+			if iconFrame then iconFrame:Destroy() end
+			updateInvSpaceLabel()
+		end
 		updateInvSpaceLabel() -- garantir mesmo que não encontrou inst
-        if selectedInstanceId == sellingId then
-            selectedInstanceId = nil
-            if preview then preview.Visible = false end
-        end
+		if selectedInstanceId == sellingId then
+			selectedInstanceId = nil
+			if preview then preview.Visible = false end
+		end
     end)
 end
 
 -- Botão para abrir a UI de cartas deste personagem
 if cardButton and cardButton:IsA("ImageButton") then
-	cardButton.MouseButton1Click:Connect(function()
-		if not selectedInstanceId then
-			warn("[CharsUI] Card_b clicado sem personagem selecionado")
-			return
-		end
-		if not currentInventory or not currentInventory.Instances then
-			warn("[CharsUI] Inventory ainda não disponível para abrir cartas")
-			return
-		end
-		local inst = currentInventory.Instances[selectedInstanceId]
-		if not inst then
-			warn("[CharsUI] Instância selecionada não encontrada no inventário")
-			return
-		end
-		local sourceId = inst.TemplateName or (inst.Catalog and inst.Catalog.templateName) or inst.Id
-		local Players = game:GetService("Players")
-		local localPlayer = Players.LocalPlayer
-		if not localPlayer then return end
-		local playerGui = localPlayer:FindFirstChild("PlayerGui")
-		if not playerGui then return end
+    cardButton.MouseButton1Click:Connect(function()
+        if not selectedInstanceId then
+            warn("[CharsUI] Card_b clicado sem personagem selecionado")
+            return
+        end
+        if not currentInventory or not currentInventory.Instances then
+            warn("[CharsUI] Inventory ainda não disponível para abrir cartas")
+            return
+        end
+        local inst = currentInventory.Instances[selectedInstanceId]
+        if not inst then
+            warn("[CharsUI] Instância selecionada não encontrada no inventário")
+            return
+        end
+        local sourceId = inst.TemplateName or (inst.Catalog and inst.Catalog.templateName) or inst.Id
+        local Players = game:GetService("Players")
+        local localPlayer = Players.LocalPlayer
+        if not localPlayer then return end
+        local playerGui = localPlayer:FindFirstChild("PlayerGui")
+        if not playerGui then return end
 
-		-- Robust finder for the Cards ScreenGui: prefer exact name, otherwise search heuristics
-		local function findCardsScreenGui()
-			-- 1) direct by name
-			local cg = playerGui:FindFirstChild("Cards")
-			if cg and cg:IsA("ScreenGui") then return cg end
-			-- 2) any ScreenGui that contains the common Cards root '2nd' or 'yup'
-			for _, g in ipairs(playerGui:GetChildren()) do
-				if g and g:IsA("ScreenGui") then
-					if g:FindFirstChild("2nd", true) or g:FindFirstChild("yup", true) then
-						return g
-					end
-				end
-			end
-			-- 3) any ScreenGui whose name looks like cards (case-insensitive)
-			for _, g in ipairs(playerGui:GetChildren()) do
-				if g and g:IsA("ScreenGui") then
-					local lname = tostring(g.Name):lower()
-					if string.find(lname, "card") then return g end
-				end
-			end
-			return nil
-		end
+        -- Robust finder for the Cards ScreenGui: prefer exact name, otherwise search heuristics
+        local function findCardsScreenGui()
+            local cg = playerGui:FindFirstChild("Cards")
+            if cg and cg:IsA("ScreenGui") then return cg end
+            for _, g in ipairs(playerGui:GetChildren()) do
+                if g and g:IsA("ScreenGui") then
+                    if g:FindFirstChild("2nd", true) or g:FindFirstChild("yup", true) then
+                        return g
+                    end
+                end
+            end
+            for _, g in ipairs(playerGui:GetChildren()) do
+                if g and g:IsA("ScreenGui") then
+                    local lname = tostring(g.Name):lower()
+                    if string.find(lname, "card") then return g end
+                end
+            end
+            return nil
+        end
 
-		local cardsGui = findCardsScreenGui()
-		if not cardsGui then
-			-- debug: list PlayerGui children to assist diagnosis
-			local names = {}
-			for _, c in ipairs(playerGui:GetChildren()) do table.insert(names, tostring(c.Name) .. "/" .. tostring(c.ClassName)) end
-			warn("[CharsUI] ScreenGui 'Cards' não encontrado. PlayerGui children:", table.concat(names, ", "))
-			return
-		end
+        local cardsGui = findCardsScreenGui()
+        if not cardsGui then
+            local names = {}
+            for _, c in ipairs(playerGui:GetChildren()) do table.insert(names, tostring(c.Name) .. "/" .. tostring(c.ClassName)) end
+            warn("[CharsUI] ScreenGui 'Cards' não encontrado. PlayerGui children:", table.concat(names, ", "))
+            return
+        end
 
-		-- Set the attribute and enable the GUI; use a small retry if the child root is created shortly after enable
-		local function enableAndShow(g)
-			pcall(function() g:SetAttribute("ShowCharacterCards", sourceId) end)
-			pcall(function() g.Enabled = true end)
-			print(string.format("[CharsUI] Requested Cards UI on %s for sourceId=%s", tostring(g.Name), tostring(sourceId)))
-			-- If the Cards script hasn't processed the attribute yet (e.g., waits for children), try again shortly
-			task.delay(0.07, function()
-				if g and g.Parent then
-					pcall(function() g:SetAttribute("ShowCharacterCards", sourceId) end)
-				end
-			end)
-		end
+        local function enableAndShow(g)
+            pcall(function() g:SetAttribute("ShowCharacterCards", sourceId) end)
+            pcall(function() g.Enabled = true end)
+            print(string.format("[CharsUI] Requested Cards UI on %s for sourceId=%s", tostring(g.Name), tostring(sourceId)))
+            task.delay(0.07, function()
+                if g and g.Parent then
+                    pcall(function() g:SetAttribute("ShowCharacterCards", sourceId) end)
+                end
+            end)
+        end
 
-		enableAndShow(cardsGui)
-	end)
+        enableAndShow(cardsGui)
+    end)
 end
 
 -- (currentInventory já declarado em topo antes das funções)
@@ -783,12 +1161,39 @@ local function createIcon(inst)
 	local clickTarget = clone:FindFirstChild("Icon_b")
 	if clickTarget and clickTarget:IsA("ImageButton") then
 		clickTarget.MouseButton1Click:Connect(function()
+			-- If we are in select mode, toggle selection instead of showing preview
+			if selectMode then
+				-- Do not allow selecting equipped instances
+				if computeIsEquipped(inst.Id) then
+					-- optional feedback: flash or warn
+					warn("[CharsUI] Cannot select equipped character for multi-sell: " .. tostring(inst.Id))
+					return
+				end
+				local isNow = not (selectedForSell[inst.Id] == true)
+				selectedForSell[inst.Id] = isNow and true or nil
+				applySelectionOverlayToIcon(clone, isNow)
+				-- update select button text to show count
+				local count = 0
+				for _, v in pairs(selectedForSell) do if v then count += 1 end end
+				setSelectButtonText(string.format("Cancel (%d)", count))
+				return
+			end
 			updatePreview(inst)
 		end)
 	else
 		-- fallback: se não existir Icon_b mas temos o frame, podemos ligar no próprio clone
 		clone.InputBegan:Connect(function(input)
 			if input.UserInputType == Enum.UserInputType.MouseButton1 then
+				if selectMode then
+					if computeIsEquipped(inst.Id) then warn("[CharsUI] Cannot select equipped character for multi-sell: " .. tostring(inst.Id)) return end
+					local isNow = not (selectedForSell[inst.Id] == true)
+					selectedForSell[inst.Id] = isNow and true or nil
+					applySelectionOverlayToIcon(clone, isNow)
+					local count = 0
+					for _, v in pairs(selectedForSell) do if v then count += 1 end end
+					setSelectButtonText(string.format("Cancel (%d)", count))
+					return
+				end
 				updatePreview(inst)
 			end
 		end)
@@ -797,6 +1202,7 @@ local function createIcon(inst)
 	clone:SetAttribute("Stars", stars)
 	clone.Parent = scrolling
 	print(string.format("[CharsUI] Icon criado -> id=%s name=%s stars=%d level=%s", tostring(inst.Id), tostring(cat.displayName or inst.TemplateName), stars, tostring(inst.Level)))
+	return clone
 end
 
 local function renderInventory()
@@ -805,9 +1211,32 @@ local function renderInventory()
 		return
 	end
 	local list = currentInventory.OrderedList or {}
+
+	-- Validation: detectar entradas nulas/invalidas no OrderedList
+	for i = 1, math.min(#list, 12) do
+		local inst = list[i]
+		if not inst then
+			warn(string.format("[CharsUI][WARN] OrderedList[%d] is nil", i))
+		else
+			if type(inst) ~= "table" or not inst.Id then
+				warn(string.format("[CharsUI][WARN] OrderedList[%d] seems invalid (type=%s, Id=%s)", i, typeof(inst), tostring(inst and inst.Id)))
+			end
+		end
+	end
 	clearIcons()
 	for i, inst in ipairs(list) do
-		createIcon(inst)
+		local clone = createIcon(inst)
+		if clone then
+			-- set explicit LayoutOrder to force correct grid ordering
+			pcall(function() clone.LayoutOrder = i end)
+		end
+	end
+	-- Reapply any existing selection overlays after recreating icons
+	for id, _ in pairs(selectedForSell) do
+		local iconFrame = scrolling:FindFirstChild(id)
+		if iconFrame then
+			applySelectionOverlayToIcon(iconFrame, true)
+		end
 	end
 	print("[CharsUI] renderInventory concluiu. Total=", #list)
 
@@ -910,6 +1339,141 @@ local function renderInventory()
 
 	-- Atualizar indicador de espaço (occupied/total)
 	updateInvSpaceLabel()
+
+	-- DEBUG: listar filhos do scrolling para investigar espaço vazio no topo (apenas em Studio)
+	pcall(function()
+		local RunService = game:GetService("RunService")
+		if RunService:IsStudio() then
+			print("[CharsUI][DEBUG] Scrolling children dump START")
+			local idx = 0
+			for _, child in ipairs(scrolling:GetChildren()) do
+				if child:IsA("Frame") then
+					idx = idx + 1
+					local lo = nil
+					pcall(function() lo = child.LayoutOrder end)
+					print(string.format("[CharsUI][DEBUG] child#%d name=%s Visible=%s LayoutOrder=%s Size=%s", idx, tostring(child.Name), tostring(child.Visible), tostring(lo), tostring(child.Size)))
+				end
+				if idx >= 30 then break end
+			end
+			print("[CharsUI][DEBUG] Scrolling children dump END")
+		end
+	end)
+
+	-- DEBUG: checar UIPadding / UIListLayout padding
+	pcall(function()
+		local RunService = game:GetService("RunService")
+		if RunService:IsStudio() then
+			local pad = scrolling:FindFirstChildWhichIsA("UIPadding")
+			local list = scrolling:FindFirstChildWhichIsA("UIListLayout") or scrolling:FindFirstChildWhichIsA("UIGridLayout")
+			print("[CharsUI][DEBUG] UIPadding present:", tostring(pad ~= nil))
+			if pad then print("[CharsUI][DEBUG] UIPadding.Top=", tostring(pad.PaddingTop)) end
+			print("[CharsUI][DEBUG] UIListLayout present:", tostring(list ~= nil))
+			if list and list:IsA("UIListLayout") then
+				print("[CharsUI][DEBUG] UIListLayout.Padding=", tostring(list.Padding))
+			end
+		end
+	end)
+
+	-- POST-LAYOUT: corrigir gap no topo forçando CanvasPosition de forma segura
+	-- Isto alinha o primeiro ícone visível ao topo do ScrollingFrame se houver um grande espaço vazio.
+	task.delay(0.06, function()
+		pcall(function()
+			-- procurar primeiro filho visível (excluindo template)
+			local firstChild
+			for _, c in ipairs(scrolling:GetChildren()) do
+				if c:IsA("Frame") and c ~= template and c.Visible then
+					firstChild = c
+					break
+				end
+			end
+			if firstChild then
+				local iconTopAbs = firstChild.AbsolutePosition.Y
+				local scrollTopAbs = scrolling.AbsolutePosition.Y
+				local iconTopInCanvas = (iconTopAbs - scrollTopAbs) + scrolling.CanvasPosition.Y
+				local desiredTopMargin = 6
+				local targetY = math.max(0, math.floor(iconTopInCanvas - desiredTopMargin))
+				-- Aplicar sem tween para evitar jitter na renderização inicial
+				scrolling.CanvasPosition = Vector2.new(0, targetY)
+				print(string.format("[CharsUI] Post-layout scroll fix applied: targetY=%d (iconTopInCanvas=%.1f)", targetY, iconTopInCanvas))
+			end
+		end)
+	end)
+
+		-- Garantir que o UIGridLayout está alinhado ao topo (evita centro/offset inesperado)
+		pcall(function()
+			local grid = scrolling:FindFirstChildWhichIsA("UIGridLayout")
+			if grid then
+				pcall(function()
+					grid.VerticalAlignment = Enum.VerticalAlignment.Top
+					grid.HorizontalAlignment = Enum.HorizontalAlignment.Left
+				end)
+			end
+		end)
+
+		-- Se após o post-layout o primeiro filho continuar muito abaixo, forçar um scroll adicional
+		task.delay(0.11, function()
+			pcall(function()
+				local firstChild
+				for _, c in ipairs(scrolling:GetChildren()) do
+					if c:IsA("Frame") and c ~= template and c.Visible then
+						firstChild = c break
+					end
+				end
+				if not firstChild then return end
+				local iconTopAbs = firstChild.AbsolutePosition.Y
+				local scrollTopAbs = scrolling.AbsolutePosition.Y
+				local iconTopInCanvas = (iconTopAbs - scrollTopAbs) + scrolling.CanvasPosition.Y
+				local windowHeight = (scrolling.AbsoluteWindowSize and scrolling.AbsoluteWindowSize.Y) or scrolling.AbsoluteSize.Y
+				-- se o primeiro ícone começa depois de 20% da janela, aplicar scroll extra
+				if iconTopInCanvas > windowHeight * 0.20 then
+					local extra = math.floor(windowHeight * 0.12)
+					local desiredTopMargin = 6
+					local targetY = math.max(0, math.floor(iconTopInCanvas - desiredTopMargin - extra))
+					scrolling.CanvasPosition = Vector2.new(0, targetY)
+					print(string.format("[CharsUI] Extra post-layout scroll applied: targetY=%d (iconTopInCanvas=%.1f, extra=%d)", targetY, iconTopInCanvas, extra))
+				end
+			end)
+		end)
+
+	-- EXTRA DEBUG: print absolute positions, canvas and grid properties to locate top gap
+	pcall(function()
+		local RunService = game:GetService("RunService")
+		if RunService:IsStudio() then
+			print("[CharsUI][DEBUG2] Scrolling AbsolutePosition=", tostring(scrolling.AbsolutePosition), " AbsoluteSize=", tostring(scrolling.AbsoluteSize))
+			print("[CharsUI][DEBUG2] Scrolling CanvasPosition=", tostring(scrolling.CanvasPosition))
+			if scrolling.AbsoluteCanvasSize then print("[CharsUI][DEBUG2] AbsoluteCanvasSize=", tostring(scrolling.AbsoluteCanvasSize)) end
+			if scrolling.AbsoluteWindowSize then print("[CharsUI][DEBUG2] AbsoluteWindowSize=", tostring(scrolling.AbsoluteWindowSize)) end
+			-- first visible child
+			local firstChild
+			for _, c in ipairs(scrolling:GetChildren()) do
+				if c:IsA("Frame") and c ~= template and c.Visible then
+					firstChild = c
+					break
+				end
+			end
+			if firstChild then
+				print("[CharsUI][DEBUG2] First child name=", firstChild.Name, " LayoutOrder=", tostring(firstChild.LayoutOrder))
+				print("[CharsUI][DEBUG2] First child AbsolutePosition=", tostring(firstChild.AbsolutePosition), " AbsoluteSize=", tostring(firstChild.AbsoluteSize))
+				print("[CharsUI][DEBUG2] First child Position=", tostring(firstChild.Position), " AnchorPoint=", tostring(firstChild.AnchorPoint))
+			else
+				print("[CharsUI][DEBUG2] No first child found")
+			end
+			-- Grid layout info
+			local grid = scrolling:FindFirstChildWhichIsA("UIGridLayout")
+			if grid then
+				print("[CharsUI][DEBUG2] UIGridLayout.CellSize=", tostring(grid.CellSize), " CellPadding=", tostring(grid.CellPadding), " StartCorner=", tostring(grid.StartCorner), " FillDirection=", tostring(grid.FillDirection), " SortOrder=", tostring(grid.SortOrder))
+			end
+			-- Walk ancestors to find any UIPadding
+			local anc = scrolling.Parent
+			while anc do
+				local p = anc:FindFirstChildWhichIsA("UIPadding")
+				if p then
+					print(string.format("[CharsUI][DEBUG2] Ancestor %s has UIPadding.Top=%s", tostring(anc:GetFullName()), tostring(p.PaddingTop)))
+				end
+				anc = anc.Parent
+			end
+		end
+	end)
 end
 
 local function fetchInventory()
@@ -1133,6 +1697,8 @@ end
 local function hide()
 	if not isOpen then return end
 	isOpen = false
+	-- exit select mode when hiding the UI
+	pcall(function() exitSelectMode() end)
 	local tw = TweenService:Create(frame, tweenInfo, { Position = hiddenPos })
 	tw:Play()
 	tw.Completed:Connect(function()
@@ -1239,3 +1805,18 @@ if profileUpdatedEvent and profileUpdatedEvent:IsA("RemoteEvent") then
 end
 
 -- FUTURO: escutar ProfileUpdated para atualizar apenas diferenças
+
+-- Allow other local scripts to request a refresh by setting the ScreenGui attribute `Refresh`.
+pcall(function()
+	if rootGui and rootGui.GetAttributeChangedSignal then
+		rootGui:GetAttributeChangedSignal("Refresh"):Connect(function()
+			local v = false
+			pcall(function() v = rootGui:GetAttribute("Refresh") end)
+			if v then
+				print("[CharsUI] Refresh attribute set -> refetching inventory")
+				fetchInventory()
+				pcall(function() rootGui:SetAttribute("Refresh", false) end)
+			end
+		end)
+	end
+end)

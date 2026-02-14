@@ -9,4 +9,7 @@ TentenStats.Passives = {
 	Health = 300,
 }
 
+-- XP dado quando consumido no Feed (3 = 5000)
+TentenStats.FeedXP = 5000
+
 return TentenStats

@@ -9,6 +9,7 @@ local ScriptsFolder = ReplicatedStorage:WaitForChild("Scripts")
 local ProfileService = require(ScriptsFolder:WaitForChild("ProfileService"))
 local AccountLeveling = require(ScriptsFolder:WaitForChild("AccountLeveling"))
 local CharacterService = require(ScriptsFolder:WaitForChild("CharacterService"))
+local MissionsService = require(ScriptsFolder:WaitForChild("MissionsService"))
 local ItemsRegistry = nil
 pcall(function()
     ItemsRegistry = require(ReplicatedStorage:WaitForChild("Shared"):WaitForChild("Items"):WaitForChild("Registry"))
@@ -244,6 +245,25 @@ applyRunResult = function(player, runResult)
                 end
             end
         end
+        
+        -- Characters format from run: ["XP3", "XP4", "XP3", ...]
+        -- Add each character template to player's inventory
+        local chars = rewards.Characters
+        if type(chars) == "table" and #chars > 0 then
+            for _, templateName in ipairs(chars) do
+                if type(templateName) == "string" and templateName ~= "" then
+                    local okAdd, errOrInst = pcall(function()
+                        return CharacterService:AddCharacter(player, templateName)
+                    end)
+                    if okAdd then
+                        print(string.format("[RunResult] Added character %s for %s", templateName, player.Name))
+                    else
+                        warn(string.format("[RunResult] Failed to add character %s for %s: %s", 
+                            templateName, player.Name, tostring(errOrInst)))
+                    end
+                end
+            end
+        end
         -- Log post-apply account balances for verification
         if acc then
             print(string.format("[RunResult] Post-apply balances -> Coins=%d Gems=%d", tonumber(acc.Coins) or 0, tonumber(acc.Gems) or 0))
@@ -257,14 +277,58 @@ applyRunResult = function(player, runResult)
         if mapId ~= "" and lvl and lvl >= 1 then
             pcall(function()
                 ProfileService:MarkStoryLevelCompleted(player, mapId, lvl)
-            end)
-        end
+				-- Update missions: story level completed
+				MissionsService:CompleteStoryLevel(profile, mapId, lvl)
+			end)
+		end
+	end
+	
+	-- 5) Damage tracking for missions
+	local totalDamage = tonumber(runResult.TotalDamage) or 0
+	if totalDamage > 0 then
+		pcall(function()
+			MissionsService:AddDamageDealt(profile, totalDamage)
+			print(string.format("[RunResult] Added %d damage to missions for %s", totalDamage, player.Name))
+		end)
+	end
+	
+	-- 6) Infinite mode tracking for missions
+	if runResult.Infinite and type(runResult.Infinite) == "table" then
+		local highestWave = tonumber(runResult.Infinite.HighestWave) or 0
+		if highestWave > 0 then
+			pcall(function()
+				MissionsService:UpdateInfiniteWave(profile, highestWave)
+				print(string.format("[RunResult] Updated infinite wave %d for %s", highestWave, player.Name))
+			end)
+		end
+	end
+
+    -- Also update profile's Infinite tracking (HighestWave and MilestonesReached) so lobby state reflects run
+    if runResult.Infinite and type(runResult.Infinite) == "table" then
+        pcall(function()
+            profile.Infinite = profile.Infinite or {}
+            profile.Infinite.HighestWave = math.max(tonumber(profile.Infinite.HighestWave) or 0, tonumber(runResult.Infinite.HighestWave) or 0)
+            -- mirror to Account.HighInfWave for backward compatibility / quick access
+            profile.Account = profile.Account or {}
+            profile.Account.HighInfWave = math.max(tonumber(profile.Account.HighInfWave) or 0, tonumber(runResult.Infinite.HighestWave) or 0)
+
+            -- MilestonesReached: copy any newly reached milestones from runResult into profile.Infinite.MilestonesReached
+            if type(runResult.Infinite.MilestonesReached) == "table" then
+                profile.Infinite.MilestonesReached = profile.Infinite.MilestonesReached or {}
+                for _, m in ipairs(runResult.Infinite.MilestonesReached) do
+                    local mi = tonumber(m)
+                    if mi and mi > 0 then
+                        profile.Infinite.MilestonesReached[mi] = true
+                    end
+                end
+            end
+        end)
     end
 
-    -- Notify client and persist
-    local snapshot = ProfileService:BuildClientSnapshot(profile)
-    ProfileUpdatedRE:FireClient(player, { full = snapshot })
-    pcall(function() ProfileService:Save(player) end)
+	-- Notify client and persist
+	local snapshot = ProfileService:BuildClientSnapshot(profile)
+	ProfileUpdatedRE:FireClient(player, { full = snapshot })
+	pcall(function() ProfileService:Save(player) end)
 
     -- Mark applied RunId on profile to avoid duplicate application
     if runId then

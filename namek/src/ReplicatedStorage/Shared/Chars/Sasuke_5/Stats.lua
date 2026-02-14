@@ -10,4 +10,7 @@ SasukeStats.Passives = {
 	Health = 750,      -- 5x do 3★ (150) - LOW HP (glass cannon)
 }
 
+-- XP dado quando consumido no Feed (5 = 50000)
+SasukeStats.FeedXP = 50000
+
 return SasukeStats

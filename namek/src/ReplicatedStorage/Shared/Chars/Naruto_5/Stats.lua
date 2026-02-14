@@ -10,4 +10,7 @@ NarutoStats.Passives = {
 	Health = 2000,     -- Massivo upgrade (20x do 3★)
 }
 
+-- XP dado quando consumido no Feed (5 = 50000)
+NarutoStats.FeedXP = 50000
+
 return NarutoStats

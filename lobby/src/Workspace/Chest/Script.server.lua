@@ -35,25 +35,12 @@ local clientReady = {} -- map<userId, boolean>
 
 print(string.format("[ChestBlock] Remotes: Open_Chest=%s OpenChestFunction=%s", tostring(openRemote and openRemote:GetFullName()), tostring(openChestFunction and openChestFunction:GetFullName())))
 
-local function findTouchable(base)
-	if not base then return nil end
-	if base:IsA("BasePart") then return base end
-	for _, d in ipairs(base:GetDescendants()) do
-		if d:IsA("BasePart") then return d end
-	end
-	return nil
-end
-
-local part = findTouchable(script.Parent)
-if not part then
-	warn("[ChestBlock] Nenhuma BasePart encontrada para conectar Touched (parent=", script.Parent and script.Parent:GetFullName(), ")")
-end
+local part = script.Parent
 local debounce = {}
 local DEBOUNCE_SECONDS = 0.8
 
 ChestClientReadyRE.OnServerEvent:Connect(function(player)
 	clientReady[player.UserId] = true
-	print("[ChestBlock] Cliente pronto para Chest:", player.Name)
 end)
 
 Players.PlayerRemoving:Connect(function(player)
@@ -68,7 +55,7 @@ local function playerFromHit(hit)
 	return Players:GetPlayerFromCharacter(char)
 end
 
-if part and part.Touched then part.Touched:Connect(function(hit)
+part.Touched:Connect(function(hit)
 	local player = playerFromHit(hit)
 	print("[ChestBlock] playerFromHit:", player, player and player.Name)
 	if not player then return end
@@ -114,4 +101,4 @@ if part and part.Touched then part.Touched:Connect(function(hit)
 	else
 		warn("RemoteFunction OpenChestFunction não encontrado em ReplicatedStorage.Remotes")
 	end
-end end)
+end)
