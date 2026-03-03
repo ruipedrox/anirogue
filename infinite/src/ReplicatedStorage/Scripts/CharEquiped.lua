@@ -7,7 +7,8 @@ local ReplicatedStorage = game:GetService("ReplicatedStorage")
 local CharactersModule = {}
 
 -- Default equipped character names (equip both for ability testing)
-CharactersModule.DefaultEquippedNames = { "Sasuke_5", "Ichigo_5" }
+-- Default to Jotaro for testing
+CharactersModule.DefaultEquippedNames = { "Gojo_5", "Kame_4" }
 
 -- Forward declaration to allow usage before definition inside Initialize
 local collectEquippedInstances
@@ -88,17 +89,17 @@ function CharactersModule:Initialize(player)
 		end
 	end
 
-	-- Se por algum motivo nenhum personagem foi adicionado, tentar equipar Goku_5 por defeito
+	-- Se por algum motivo nenhum personagem foi adicionado, tentar equipar Saitama_5 por defeito
 	if #charsFolder:GetChildren() == 0 then
 		local fallbackRoot = charsRoot or getCharsFolder()
-		local fallback = fallbackRoot and fallbackRoot:FindFirstChild("Goku_5")
+		local fallback = fallbackRoot and fallbackRoot:FindFirstChild("Saitama_5")
 		if fallback then
 			local ov = Instance.new("ObjectValue")
-			ov.Name = "Goku_5"
+			ov.Name = "Saitama_5"
 			ov.Value = fallback
 			ov.Parent = charsFolder
 		else
-			warn("[CharEquiped] Falha ao equipar fallback Goku_5; Chars root indisponível.")
+			warn("[CharEquiped] Falha ao equipar fallback Saitama_5; Chars root indisponível.")
 		end
 	end
 end

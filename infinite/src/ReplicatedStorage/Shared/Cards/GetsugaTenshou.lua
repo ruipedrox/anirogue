@@ -7,6 +7,7 @@ local RunService = game:GetService("RunService")
 local CollectionService = game:GetService("CollectionService")
 
 local Projectile = require(ReplicatedStorage:WaitForChild("Scripts"):WaitForChild("Projectile"))
+local Damage = require(ReplicatedStorage:WaitForChild("Scripts"):WaitForChild("Combat"):WaitForChild("Damage"))
 
 local def = {
 	Name = "Getsuga Tenshou",
@@ -149,25 +150,15 @@ local function fireGetsuga(player, level)
 		direction = Vector3.new(math.cos(randomAngle), 0, math.sin(randomAngle))
 	end
 	
-	-- Calculate directions based on projectile count and level logic
+	-- Calculate directions: evenly space N projectiles around full circle (360/N degrees)
 	local directions = {}
-	
-	if stats.projectileCount == 1 then
-		-- Level 1-2: Single projectile aimed at enemy
-		table.insert(directions, direction)
-	elseif stats.projectileCount == 2 then
-		-- Level 3-4: Two projectiles - one at enemy, one opposite (180°)
-		table.insert(directions, direction)
-		table.insert(directions, -direction) -- Opposite direction
-	elseif stats.projectileCount == 3 then
-		-- Level 5: Three projectiles separated by 120° (360/3), one aimed at enemy
-		table.insert(directions, direction)
-		-- Rotate by 120° and 240° from base direction
-		local baseCF = CFrame.new(Vector3.zero, direction)
-		local dir2 = (baseCF * CFrame.Angles(0, math.rad(120), 0)).LookVector
-		local dir3 = (baseCF * CFrame.Angles(0, math.rad(240), 0)).LookVector
-		table.insert(directions, dir2)
-		table.insert(directions, dir3)
+	local n = tonumber(stats.projectileCount) or 1
+	if n < 1 then n = 1 end
+	local baseCF = CFrame.new(Vector3.zero, direction)
+	for i = 0, n - 1 do
+		local angleDeg = (360 / n) * i
+		local dir = (baseCF * CFrame.Angles(0, math.rad(angleDeg), 0)).LookVector
+		table.insert(directions, dir)
 	end
 	
 	-- Fire projectiles with calculated directions
@@ -228,13 +219,24 @@ local function fireGetsuga(player, level)
 				speed = 40,
 				lifetime = 5,
 				pierce = math.huge, -- Infinite pierce
-				damage = projectileDamage,
+				damage = 0, -- use onHit to reliably apply damage to every enemy
 				owner = player,
 				ignore = { char },
 				model = projectileModel,
 				orientationOffset = CFrame.Angles(0, math.rad(-45), 0),
 				contactRadius = 1.5 * stats.size,
-				hitCooldownPerTarget = 0.5,
+				hitCooldownPerTarget = 0.2, -- small cooldown to avoid duplicate hits on same target
+				onHit = function(hitPart, enemyModel)
+					-- Defensive: ensure enemyModel and humanoid exist
+					if not enemyModel then return end
+					local hum = enemyModel:FindFirstChildOfClass("Humanoid")
+					if hum and hum.Health > 0 then
+						-- Apply damage directly so every pass-through deals damage
+						pcall(function()
+							Damage.Apply(hum, projectileDamage)
+						end)
+					end
+				end,
 			})
 		end)
 	end

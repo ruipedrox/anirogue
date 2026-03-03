@@ -217,14 +217,24 @@ task.spawn(function()
 					end)
 				end
 				
+				-- Determine projectile damage from STATS or enemy attributes (BaseDamage/Damage)
+				local pdmgBase = nil
+				if STATS and typeof(STATS.ProjectileDamage) == "number" then
+					pdmgBase = STATS.ProjectileDamage
+				else
+					pdmgBase = enemyModel:GetAttribute("BaseDamage") or enemyModel:GetAttribute("Damage") or 15
+				end
+				local dmgMult = enemyModel:GetAttribute("DamageWaveMultiplier") or 1
+				local finalProjectileDamage = math.floor(pdmgBase * dmgMult + 0.5)
+
 				-- Fire energyball projectile
 				Projectile.Fire({
 					origin = origin,
 					direction = dir,
 					speed = PROJECTILE_SPEED,
-				lifetime = 5,
+					lifetime = 5,
 					pierce = PIERCE,
-					damage = PROJECTILE_DAMAGE,
+					damage = finalProjectileDamage,
 					owner = enemyModel,
 					ignore = { enemyModel },
 					orientationOffset = CFrame.new(),

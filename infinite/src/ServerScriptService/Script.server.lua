@@ -13,6 +13,11 @@ local ServerScriptService = game:GetService("ServerScriptService")
 
 local ScriptsFolder = ReplicatedStorage:WaitForChild("Scripts")
 local sharedFolder = ReplicatedStorage:WaitForChild("Shared")
+local EnemyStats
+do
+	local ok, mod = pcall(function() return require(ScriptsFolder:WaitForChild("EnemyStats")) end)
+	if ok and type(mod) == "table" then EnemyStats = mod end
+end
 
 -- Ensure Remotes folder exists as early as possible so clients waiting on it don't hang
 local Remotes = ReplicatedStorage:FindFirstChild("Remotes")
@@ -20,6 +25,48 @@ if not Remotes then
 	Remotes = Instance.new("Folder")
 	Remotes.Name = "Remotes"
 	Remotes.Parent = ReplicatedStorage
+end
+
+-- AutoAttack SFX remote
+if not Remotes:FindFirstChild("AutoAttackSFX") then
+	local re = Instance.new("RemoteEvent")
+	re.Name = "AutoAttackSFX"
+	re.Parent = Remotes
+end
+
+-- Crit SFX remote
+if not Remotes:FindFirstChild("CritSFX") then
+	local re = Instance.new("RemoteEvent")
+	re.Name = "CritSFX"
+	re.Parent = Remotes
+end
+
+-- Electric SFX remote
+if not Remotes:FindFirstChild("ElectricSFX") then
+	local re = Instance.new("RemoteEvent")
+	re.Name = "ElectricSFX"
+	re.Parent = Remotes
+end
+
+-- Bleed SFX remote
+if not Remotes:FindFirstChild("BleedSFX") then
+	local re = Instance.new("RemoteEvent")
+	re.Name = "BleedSFX"
+	re.Parent = Remotes
+end
+
+-- Burn SFX remote
+if not Remotes:FindFirstChild("BurnSFX") then
+	local re = Instance.new("RemoteEvent")
+	re.Name = "BurnSFX"
+	re.Parent = Remotes
+end
+
+-- Card ability SFX remote (carries card id so client picks the right sound)
+if not Remotes:FindFirstChild("CardAbilitySFX") then
+	local re = Instance.new("RemoteEvent")
+	re.Name = "CardAbilitySFX"
+	re.Parent = Remotes
 end
 
 -- Predeclare DataStores handle so functions defined earlier (e.g., endRun) can reference it reliably
@@ -509,54 +556,66 @@ local function ensureWaveManager()
 				clonerCount = totalEnemies - meleeCount - rangedCount - regenCount
 			end
 			
-			-- Scale HP and Damage based on wave number (5% composto por wave - relativo à anterior)
-			local hpScale = math.pow(1.05, waveIndex - 1)
-			local dmgScale = math.pow(1.05, waveIndex - 1)
+			-- Scale HP and Damage based on wave number (now using 20% compounded per wave)
+			local hpScale = math.pow(1.2, waveIndex - 1)
+			local dmgScale = math.pow(1.2, waveIndex - 1)
 			-- XP scales moderately per wave (+8% per wave - slower than level requirement growth)
 			local xpScale = 1 + (waveIndex - 1) * 0.08
 			
 			local enemies = {}
 			
-			-- Add Melee enemies
+			-- Add Melee enemies (use EnemyStats base values, then apply per-wave scaling)
 			if meleeCount > 0 then
+				local meleeStats = EnemyStats.GetByType("melee") or {}
+				local baseHealth = (meleeStats.Health and tonumber(meleeStats.Health)) or 50
+				local baseDamageVal = (meleeStats.Damage and tonumber(meleeStats.Damage)) or 5
 				table.insert(enemies, {
 					type = "melee",
 					count = meleeCount,
-					baseHP = math.floor(500 * hpScale),
-					baseDamage = math.floor(50 * dmgScale),
+					baseHP = math.floor(baseHealth * hpScale),
+					baseDamage = math.floor(baseDamageVal * dmgScale),
 					xp = math.floor(15 * xpScale),
 				})
 			end
 			
-			-- Add Ranged enemies
+			-- Add Ranged enemies (use EnemyStats base values, then apply per-wave scaling)
 			if rangedCount > 0 then
+				local rangedStats = EnemyStats.GetByType("ranged") or {}
+				local baseHealth = (rangedStats.Health and tonumber(rangedStats.Health)) or 40
+				local baseDamageVal = (rangedStats.Damage and tonumber(rangedStats.Damage)) or 4
 				table.insert(enemies, {
 					type = "ranged",
 					count = rangedCount,
-					baseHP = math.floor(400 * hpScale),
-					baseDamage = math.floor(60 * dmgScale),
+					baseHP = math.floor(baseHealth * hpScale),
+					baseDamage = math.floor(baseDamageVal * dmgScale),
 					xp = math.floor(18 * xpScale),
 				})
 			end
 			
 			-- Add Regen enemies
-			if regenCount > 0 then
-				table.insert(enemies, {
-					type = "regen",
-					count = regenCount,
-					baseHP = math.floor(600 * hpScale),
-					baseDamage = math.floor(45 * dmgScale),
-					xp = math.floor(24 * xpScale),
-				})
-			end
+				if regenCount > 0 then
+					local regenStats = EnemyStats.GetByType("regen") or {}
+					local baseHealth = (regenStats.Health and tonumber(regenStats.Health)) or 70
+					local baseDamageVal = (regenStats.Damage and tonumber(regenStats.Damage)) or 6
+					table.insert(enemies, {
+						type = "regen",
+						count = regenCount,
+						baseHP = math.floor(baseHealth * hpScale),
+						baseDamage = math.floor(baseDamageVal * dmgScale),
+						xp = math.floor(24 * xpScale),
+					})
+				end
 			
 			-- Add Cloner enemies
 			if clonerCount > 0 then
+				local clonerStats = EnemyStats.GetByType("cloner") or {}
+				local baseHealth = (clonerStats.Health and tonumber(clonerStats.Health)) or 60
+				local baseDamageVal = (clonerStats.Damage and tonumber(clonerStats.Damage)) or 5
 				table.insert(enemies, {
 					type = "cloner",
 					count = clonerCount,
-					baseHP = math.floor(450 * hpScale),
-					baseDamage = math.floor(55 * dmgScale),
+					baseHP = math.floor(baseHealth * hpScale),
+					baseDamage = math.floor(baseDamageVal * dmgScale),
 					xp = math.floor(28 * xpScale),
 				})
 			end
@@ -1646,9 +1705,13 @@ task.spawn(function()
 		if anyAlive then
 			lastAliveTimestamp = os.clock()
 		else
-			if os.clock() - lastAliveTimestamp >= DEFEAT_GRACE_SECONDS then
-				endRun(false)
-				break
+			if not lastAliveTimestamp then
+				lastAliveTimestamp = os.clock()
+			else
+				if os.clock() - lastAliveTimestamp >= DEFEAT_GRACE_SECONDS then
+					endRun(false)
+					break
+				end
 			end
 		end
 	end
@@ -1913,8 +1976,25 @@ LevelUpChoice.OnServerEvent:Connect(function(player, choice)
 		tag.Value = true
 	end
 
-	-- Apply the chosen card effects
-	CardDispatcher.ApplyCard(player, chosenMeta)
+	-- Determine if this card is an existing card being leveled and pass the new level
+	local runTrack = player:FindFirstChild("RunTrack") or Instance.new("Folder")
+	runTrack.Name = "RunTrack"
+	runTrack.Parent = player
+	local existingFolder = runTrack:FindFirstChild(chosenMeta.id)
+	local currentLevelParam = nil
+	if existingFolder then
+		local lvlNV = existingFolder:FindFirstChild("Level")
+		if lvlNV and lvlNV:IsA("IntValue") then
+			-- intent: when choosing a card that already exists, apply as level-up to (existing + 1)
+			currentLevelParam = lvlNV.Value + 1
+		end
+	end
+	-- Apply the chosen card effects (pass currentLevel when leveling existing card)
+	if currentLevelParam then
+		CardDispatcher.ApplyCard(player, chosenMeta, currentLevelParam)
+	else
+		CardDispatcher.ApplyCard(player, chosenMeta)
+	end
 
 	-- Reaplicar stats após aplicar carta (caso aumente Health / HealthPercent etc.)
 	local items = EquippedItemsModule:GetEquipped(player)

@@ -6,6 +6,7 @@ local ReplicatedStorage = game:GetService("ReplicatedStorage")
 local Leveling = require(ReplicatedStorage:WaitForChild("Scripts"):WaitForChild("Leveling"))
 
 local player = Players.LocalPlayer
+local playerGui = player:WaitForChild("PlayerGui")
 local frame = script.Parent  -- Frame que contém BG -> XP_Bar, XP_under, Label
 
 local bg = frame:WaitForChild("BG")
@@ -142,3 +143,20 @@ RunService.Heartbeat:Connect(function(dt)
 	bar_under.Size = UDim2.new(displayedRatio, 0, 0.85, 0)
 	label.Text = string.format("%d / %d", currentXP, needed)
 end)
+
+-- ── Botão Settings ────────────────────────────────────────────────
+local btnSettings = frame:FindFirstChild("Settings")
+if btnSettings and btnSettings:IsA("GuiButton") then
+	btnSettings.MouseButton1Click:Connect(function()
+		local settingsGui = playerGui:FindFirstChild("Settings")
+		local scriptLS = settingsGui and settingsGui:FindFirstChildWhichIsA("LocalScript")
+		if not scriptLS then return end
+		if scriptLS:GetAttribute("Show") then
+			scriptLS:SetAttribute("Hide", true)
+			scriptLS:SetAttribute("Show", false)
+		else
+			scriptLS:SetAttribute("Show", true)
+			scriptLS:SetAttribute("Hide", false)
+		end
+	end)
+end
