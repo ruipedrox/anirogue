@@ -97,7 +97,7 @@ end
 local runTrack = player:FindFirstChild("RunTrack")
 if not runTrack then
     -- wait until server initializes it
-    runTrack = player:WaitForChild("RunTrack")
+    runTrack = player:WaitForChild("RunTrack", 15)
 end
 
 -- Listen for RunStart to establish client-side tick baseline

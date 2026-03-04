@@ -104,6 +104,9 @@ end
 -- Deduplicate characters: remove unintended duplicates of the same TemplateName when safe
 local function dedupeCharacterInstances(profile)
     if not profile or not profile.Characters or not profile.Characters.Instances then return end
+    -- Prevent running dedupe repeatedly: only run once per profile (legacy cleanup)
+    profile.Meta = profile.Meta or {}
+    if profile.Meta.DedupeApplied then return end
     local instances = profile.Characters.Instances
     local equippedSet = {}
     for _, id in ipairs(profile.Characters.EquippedOrder or {}) do
@@ -150,6 +153,8 @@ local function dedupeCharacterInstances(profile)
     if removed > 0 then
         warn(string.format("[ProfileService] Dedupe removed %d duplicate seed instances", removed))
     end
+    -- Mark as applied so we don't accidentally remove legitimately-acquired copies later
+    profile.Meta.DedupeApplied = true
 end
 
 -- ===== Story progression helpers =====

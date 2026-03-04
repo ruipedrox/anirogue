@@ -155,8 +155,8 @@ local function createInfinityEffect(character, range)
 	return effect
 end
 
-function def.OnEquip(player, level)
-	level = math.clamp(level or 1, 1, def.MaxLevel)
+function def.OnEquip(player, level, maxLevel)
+	level = math.clamp(level or 1, 1, maxLevel or def.MaxLevel)
 	local userId = player.UserId
 	
 	-- Clean up existing
@@ -259,7 +259,7 @@ end
 -- Compatibility for CardDispatcher: called when a card instance is added (levelable/stackable support)
 function def.OnCardAdded(player, defTable, level)
 	-- defTable is the card definition from the character Cards.lua; level indicates chosen level
-	def.OnEquip(player, level or 1)
+	def.OnEquip(player, level or 1, defTable and tonumber(defTable.maxLevel))
 end
 
 -- Allow CardDispatcher.StopAllForPlayer to stop this aura

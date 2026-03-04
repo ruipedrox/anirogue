@@ -76,16 +76,7 @@ local restartBtn = makeButton("Restart Level")
 local exitBtn = makeButton("Exit")
 
 -- Remote wiring (tolerante: evita infinite yield se Remotes demorar)
-local remotesFolder = game:GetService("ReplicatedStorage"):FindFirstChild("Remotes")
-if not remotesFolder then
-	-- Tentativa suave de aguardar alguns segundos
-	local t0 = os.clock()
-	while os.clock() - t0 < 5 do
-		remotesFolder = game:GetService("ReplicatedStorage"):FindFirstChild("Remotes")
-		if remotesFolder then break end
-		task.wait(0.25)
-	end
-end
+local remotesFolder = game:GetService("ReplicatedStorage"):WaitForChild("Remotes", 15)
 if not remotesFolder then
 	warn("[DeathMenu] Pasta Remotes não encontrada - botões desativados")
 end

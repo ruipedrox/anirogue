@@ -8,6 +8,26 @@ local TweenService = game:GetService("TweenService")
 local Players = game:GetService("Players")
 local player = Players.LocalPlayer
 local UserInputService = game:GetService("UserInputService")
+local SoundService = game:GetService("SoundService")
+local Debris = game:GetService("Debris")
+
+-- ── SFX helpers ──────────────────────────────────────────────────────────────
+local SFX = {
+	start  = 138498992667102,   -- animation start (card flip begins)
+	rare   = 9045122943,        -- 5-star / legendary reveal
+	common = 109727714379123,   -- other rarities reveal
+	skip   = 140172825268473,   -- skip button
+}
+local function playRollSFX(id)
+	if not id or id == 0 then return end
+	local sfxMult = math.clamp((player:GetAttribute("SFXVolume") or 50) / 100, 0, 1)
+	local s = Instance.new("Sound")
+	s.SoundId  = "rbxassetid://" .. tostring(id)
+	s.Volume   = 0.8 * sfxMult
+	s.Parent   = SoundService
+	s:Play()
+	Debris:AddItem(s, 6)
+end
 
 local root = script.Parent
 local frame = root:FindFirstChild("Frame") or root:WaitForChild("Frame")
@@ -66,6 +86,7 @@ local skipping = false
 if skipBtn and (skipBtn:IsA("TextButton") or skipBtn:IsA("ImageButton")) then
 	skipBtn.MouseButton1Click:Connect(function()
 		skipping = true
+		playRollSFX(SFX.skip)
 	end)
 end
 
@@ -142,6 +163,9 @@ local function playSingleReveal(imageEntry)
 		end
 		return
 	end
+
+	-- play animation-start sound
+	pcall(function() playRollSFX(SFX.start) end)
 
 	-- Prepare frames
 	pcall(function()
@@ -262,6 +286,12 @@ local function playSingleReveal(imageEntry)
 	pcall(function()
 		back.Visible = false
 		if sumImg then
+			-- play rarity sound exactly when the card appears
+			pcall(function()
+				local isRare = (tonumber(stars) or 0) >= 5
+					or (type(stars) == "string" and stars:lower():match("legend") ~= nil)
+				playRollSFX(isRare and SFX.rare or SFX.common)
+			end)
 			-- Update the Studio StarGrad to match rarity before revealing
 			pcall(function() applyStarGradForStars(stars) end)
 			sumImg.Image = imageId or ""

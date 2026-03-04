@@ -23,6 +23,9 @@ local STATS do
 end
 
 local Damage = require(ReplicatedStorage:WaitForChild("Scripts"):WaitForChild("Combat"):WaitForChild("Damage"))
+local SFXHelper = require(ReplicatedStorage:WaitForChild("Scripts"):WaitForChild("SFXHelper"))
+
+local SAND_WAVE_SFX_ID = 9120622894
 
 -- Stats com defaults
 local MOVE_SPEED = 0 -- Gaara não se mexe (ranged boss)
@@ -171,6 +174,7 @@ local function activateSandShield()
 	shieldActive = true
 	
 	print("[Gaara] Ativando Sand Shield")
+	SFXHelper.playAt(root, 131948770524097, 0.85, { minDist = 15, maxDist = 90, lifetime = 3.0 })
 	
 	-- Procurar SandBall
 	local enemysFolder = ReplicatedStorage:FindFirstChild("Enemys")
@@ -298,6 +302,7 @@ local function deactivateSandShield()
 	enemyModel:SetAttribute("ShieldHP", 0)
 	
 	print("[Gaara] Desativando Sand Shield")
+	SFXHelper.playAt(root, 127154353843396, 0.9, { minDist = 15, maxDist = 90, lifetime = 2.0 })
 	
 	-- Tocar animação Sand Shield Off
 	local shieldOffTrack = playAnim("Sand Shield Off", 0.2, 1.0, 1.0)
@@ -451,6 +456,7 @@ local function trySandCoffin(now)
 		return
 	end
 	print("[Gaara] Animação carregada, tocando...")
+	SFXHelper.playAt(root, 131948770524097, 0.85, { minDist = 15, maxDist = 90, lifetime = 3.0 })
 	
 	-- Clonar SandBall e posicionar no player
 	local sandBall = sandBallTemplate:Clone()
@@ -502,6 +508,7 @@ local function trySandCoffin(now)
 			if damageDealt then return end
 			damageDealt = true
 			print("[Gaara] Evento 'hit' - Sand Coffin implodindo e causando dano")
+			SFXHelper.playAt(root, 98613621656686, 0.9, { minDist = 15, maxDist = 90, lifetime = 2.0 })
 			
 			-- Aplicar dano ao player
 			if targetRoot and targetRoot.Parent then
@@ -619,6 +626,7 @@ local function trySandWave(now)
 	-- Função para lançar uma wave
 	local function fireWave()
 		print("[Gaara] Disparando tsunami wave")
+		SFXHelper.playAt(root, SAND_WAVE_SFX_ID, 0.85, { minDist = 15, maxDist = 90, lifetime = 2.5 })
 		
 		-- Clonar tsunami wave
 		local wave = tsunamiTemplate:Clone()

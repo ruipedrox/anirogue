@@ -71,6 +71,9 @@ function def.OnCardAdded(player: Player, cardData, currentLevel: number)
 		
 		-- Unlock Serious Punch in card pool
 		player:SetAttribute("SaitamaAwakened", true)
+
+			-- Mirror training level to an attribute so generic unlock checks can use it
+			player:SetAttribute("SeriousTrainingLevel", level)
 		
 		print(string.format("[Serious Training] Player %s has AWAKENED! 100x damage, 300x health, Serious Punch unlocked!",
 			player.Name
@@ -115,6 +118,7 @@ function def.OnCardRemoved(player: Player, cardData)
 		
 		-- Remove awakening flag
 		player:SetAttribute("SaitamaAwakened", nil)
+		player:SetAttribute("SeriousTrainingLevel", nil)
 	end
 	
 	-- Cleanup

@@ -3,7 +3,7 @@ local GokuStats = {}
 -- Display metadata
 GokuStats.name = "Alien Warrior" -- renamed from Goku for copyright-safe display
 GokuStats.stars = 4
-GokuStats.icon = 84530411684994
+GokuStats.icon = 97487292377399
 -- Flag: whether this template supports evolution (UI reads from Stats)
 GokuStats.can_evolve = true
 -- Base passive stats - TANK focused (2x do 3★)

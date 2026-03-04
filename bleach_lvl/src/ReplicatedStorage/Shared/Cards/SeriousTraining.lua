@@ -46,8 +46,20 @@ local function addUpgrade(player, name, delta)
 end
 
 function def.OnCardAdded(player: Player, cardData, currentLevel: number)
-	local level = math.clamp(currentLevel or 1, 1, def.MaxLevel)
-	
+	local maxLv = (type(cardData) == "table" and tonumber(cardData.maxLevel)) or def.MaxLevel
+	local level = math.clamp(currentLevel or 1, 1, maxLv)
+
+	-- Regista nível no RunTrack para que CardPool pare de oferecer ao atingir max level
+	do
+		local cardId = (type(cardData) == "table" and cardData.id) or "Saitama_Legendary_Training"
+		local runTrack = player:FindFirstChild("RunTrack")
+		if not runTrack then runTrack = Instance.new("Folder") runTrack.Name = "RunTrack" runTrack.Parent = player end
+		local myFolder = runTrack:FindFirstChild(cardId) or Instance.new("Folder")
+		myFolder.Name = cardId; myFolder.Parent = runTrack
+		local lvlNV = myFolder:FindFirstChild("Level") or Instance.new("IntValue")
+		lvlNV.Name = "Level"; lvlNV.Value = level; lvlNV.Parent = myFolder
+	end
+
 	-- Store level
 	if not TrainingByUserId[player.UserId] then
 		TrainingByUserId[player.UserId] = {}
@@ -71,6 +83,9 @@ function def.OnCardAdded(player: Player, cardData, currentLevel: number)
 		
 		-- Unlock Serious Punch in card pool
 		player:SetAttribute("SaitamaAwakened", true)
+
+			-- Mirror training level to an attribute so generic unlock checks can use it
+			player:SetAttribute("SeriousTrainingLevel", level)
 		
 		print(string.format("[Serious Training] Player %s has AWAKENED! 100x damage, 300x health, Serious Punch unlocked!",
 			player.Name
@@ -115,6 +130,7 @@ function def.OnCardRemoved(player: Player, cardData)
 		
 		-- Remove awakening flag
 		player:SetAttribute("SaitamaAwakened", nil)
+		player:SetAttribute("SeriousTrainingLevel", nil)
 	end
 	
 	-- Cleanup

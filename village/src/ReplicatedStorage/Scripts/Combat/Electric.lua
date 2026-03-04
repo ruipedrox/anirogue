@@ -7,6 +7,9 @@ local ReplicatedStorage = game:GetService("ReplicatedStorage")
 local CollectionService = game:GetService("CollectionService")
 local DamageNumbers = require(ReplicatedStorage.Scripts.Combat.DamageNumbers)
 
+local SFXHelper       = require(ReplicatedStorage:WaitForChild("Scripts"):WaitForChild("SFXHelper"))
+local ELECTRIC_SFX_ID = 73447349344539
+
 -- Track electric stacks per player
 local ElectricStacks = {} -- [player] = { chainCount: number, damagePercent: number }
 
@@ -84,8 +87,16 @@ end
 -- opts = { player: Player, originModel: Model, damage: number, chainCount: number?, damagePercent: number? }
 function Electric.Apply(opts)
 	if not opts or not opts.originModel then return end
-	
+
 	local originModel = opts.originModel
+
+	-- SFX 3D: tocar no inimigo atingido
+	do
+		local originHrp = originModel and (originModel:FindFirstChild("HumanoidRootPart") or originModel.PrimaryPart)
+		if originHrp then
+			SFXHelper.playAt(originHrp, ELECTRIC_SFX_ID, 0.8, { minDist = 10, maxDist = 70, lifetime = 2 })
+		end
+	end
 	local baseDamage = opts.damage or 0
 	if baseDamage <= 0 then return end
 	

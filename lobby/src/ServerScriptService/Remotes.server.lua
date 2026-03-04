@@ -118,6 +118,10 @@ local StartRunRE = Instance.new("RemoteEvent")
 StartRunRE.Name = "StartRun"
 StartRunRE.Parent = remotesFolder
 
+local SaveSettingsRE = Instance.new("RemoteEvent")
+SaveSettingsRE.Name = "SaveSettings"
+SaveSettingsRE.Parent = remotesFolder
+
 local GetCharacterStatsRF = Instance.new("RemoteFunction")
 GetCharacterStatsRF.Name = "GetCharacterStats"
 GetCharacterStatsRF.Parent = remotesFolder
@@ -337,6 +341,12 @@ end
 
 Players.PlayerAdded:Connect(function(player)
 	local profile = ProfileService:CreateOrLoad(player)
+	-- Carregar volumes guardados e definir atributos no player (replicam para o cliente)
+	profile.Meta = profile.Meta or {}
+	profile.Meta.Settings = profile.Meta.Settings or {}
+	local s = profile.Meta.Settings
+	player:SetAttribute("MusicVolume", (type(s.MusicVolume) == "number") and s.MusicVolume or 50)
+	player:SetAttribute("SFXVolume",   (type(s.SFXVolume)   == "number") and s.SFXVolume   or 50)
 	-- Enviar snapshot inicial via ProfileUpdated (ou cliente pode chamar GetProfile manualmente)
 	inspectAndFireFullSnapshot(player, ProfileService:BuildClientSnapshot(profile))
 end)
@@ -492,22 +502,59 @@ DebugAddXP.OnServerEvent:Connect(function(player, amount)
 end)
 
 -- Debug: give 3 test items to player for QA/testing
-DebugGiveTestItemsRE.OnServerEvent:Connect(function(player)
+DebugGiveTestItemsRE.OnServerEvent:Connect(function(player, payload)
 	local profile = ProfileService:Get(player)
 	if not profile then return end
 
 	-- Briefly enable verbose snapshot dumps for this debug-give invocation so QA can inspect results
 	local prevDebug = DEBUG_SNAPSHOT_DUMPS
 	DEBUG_SNAPSHOT_DUMPS = true
-	-- Give one of each category using ProfileService:AddItem
 	local ps = ProfileService
-	local id1, err1 = ps:AddItem(player, "Weapons", "Kunai", { Level = 1 })
-	local id2, err2 = ps:AddItem(player, "Armors", "ClothArmor", { Level = 1 })
-	local id3, err3 = ps:AddItem(player, "Rings", "IronRing", { Level = 1 })
+	local added = {}
+	-- If caller requested a bulk grant of all drop items, add stackable drop items
+	if type(payload) == "table" and payload.action == "give_all" then
+		local amount = tonumber(payload.amount) or 10
+		local RS = game:GetService("ReplicatedStorage")
+		local Shared = RS:FindFirstChild("Shared")
+		if Shared then
+			local Drops = Shared:FindFirstChild("Drops")
+			if Drops then
+				for _, folder in ipairs(Drops:GetChildren()) do
+					if folder and folder:IsA("Folder") then
+						local itemsMod = folder:FindFirstChild("Items")
+						if itemsMod and itemsMod:IsA("ModuleScript") then
+							local ok, items = pcall(require, itemsMod)
+							if ok and type(items) == "table" then
+								for id, it in pairs(items) do
+									local cat = (type(it.Category) == "string" and it.Category) or "evolve"
+									local okAdd, err = ps:AddDropItem(player, cat, id, amount)
+									if okAdd then
+										added[#added+1] = id
+									end
+								end
+							end
+						end
+					end
+				end
+			end
+		end
+	else
+		-- Default behavior: give one of each category using ProfileService:AddItem
+		local id1, err1 = ps:AddItem(player, "Weapons", "Kunai", { Level = 1 })
+		local id2, err2 = ps:AddItem(player, "Armors", "ClothArmor", { Level = 1 })
+		local id3, err3 = ps:AddItem(player, "Rings", "IronRing", { Level = 1 })
+		if id1 then added[#added+1] = id1 end
+		if id2 then added[#added+1] = id2 end
+		if id3 then added[#added+1] = id3 end
+	end
 	-- Send updated full snapshot to client for convenience
 	local snapshot = ProfileService:BuildClientSnapshot(profile)
 	inspectAndFireFullSnapshot(player, snapshot)
-	print(string.format("[DebugGiveTestItems] %s -> %s, %s, %s", player.Name, tostring(id1), tostring(id2), tostring(id3)))
+	-- Extra guarantee: fire a direct ProfileUpdated event with the full snapshot
+	pcall(function()
+		ProfileUpdatedRE:FireClient(player, { full = snapshot })
+	end)
+	print(string.format("[DebugGiveTestItems] %s -> %s", player.Name, table.concat(added, ", ")))
 
 	-- restore previous debug setting
 	DEBUG_SNAPSHOT_DUMPS = prevDebug
@@ -1397,6 +1444,25 @@ ClaimMissionRewardRE.OnServerEvent:Connect(function(player, missionID)
 			missionID = missionID
 		})
 	end
+end)
+
+-- Guardar preferências de volume (cliente -> servidor) com debounce de 2s
+local settingsSaveDebounce = {}
+SaveSettingsRE.OnServerEvent:Connect(function(player, musicVol, sfxVol)
+	local profile = ProfileService:Get(player)
+	if not profile then return end
+	profile.Meta = profile.Meta or {}
+	profile.Meta.Settings = profile.Meta.Settings or {}
+	profile.Meta.Settings.MusicVolume = math.clamp(tonumber(musicVol) or 50, 0, 100)
+	profile.Meta.Settings.SFXVolume   = math.clamp(tonumber(sfxVol)   or 50, 0, 100)
+	-- debounce: guarda 2s após a última mudança para não spammar o DataStore
+	settingsSaveDebounce[player] = true
+	task.delay(2, function()
+		if settingsSaveDebounce[player] then
+			settingsSaveDebounce[player] = nil
+			ProfileService:Save(player)
+		end
+	end)
 end)
 
 print("[Remotes] Missions system loaded")

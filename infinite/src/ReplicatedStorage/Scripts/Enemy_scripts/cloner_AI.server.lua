@@ -5,6 +5,10 @@ local Players = game:GetService("Players")
 local ReplicatedStorage = game:GetService("ReplicatedStorage")
 local CollectionService = game:GetService("CollectionService")
 
+local ScriptsFolder = ReplicatedStorage:WaitForChild("Scripts")
+local SFXHelper = require(ScriptsFolder:WaitForChild("SFXHelper"))
+local CLONE_SPAWN_SFX_ID = 101786084555192
+
 local RANGE = 3
 local COOLDOWN = 0.5
 local DEFAULT_DAMAGE = 10
@@ -202,6 +206,7 @@ local function spawnClone(statMultiplier)
 	local cloneRoot = clone.PrimaryPart or clone:FindFirstChild("HumanoidRootPart")
 	if cloneRoot then
 		clone:PivotTo(CFrame.new(spawnPos))
+		SFXHelper.playAt(cloneRoot, CLONE_SPAWN_SFX_ID, 0.85, { minDist = 15, maxDist = 80, lifetime = 3 })
 	end
 
 	-- Tag as enemy so WaveManager can track it

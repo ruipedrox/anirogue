@@ -374,6 +374,7 @@ end
 local RARITY_COLORS = {
     Legendary = Color3.fromRGB(255, 230, 0),    -- amarelo
     Epic      = Color3.fromRGB(170, 0, 255),    -- roxo
+    Mythic    = Color3.fromRGB(200, 30, 30),    -- vermelho (para Mythic)
     Rare      = Color3.fromRGB(0, 140, 255),    -- azul
     Common    = Color3.fromRGB(0, 190, 60),     -- verde
 }

@@ -5,6 +5,10 @@ local DoT = {}
 local ReplicatedStorage = game:GetService("ReplicatedStorage")
 local DamageNumbers = require(ReplicatedStorage.Scripts.Combat.DamageNumbers)
 
+local SFXHelper    = require(ReplicatedStorage:WaitForChild("Scripts"):WaitForChild("SFXHelper"))
+local BURN_SFX_ID  = 76814064455634
+local BLEED_SFX_ID = 131304480978270
+
 -- Track active DoT visual effects per model
 local ActiveEffects = {} -- [model] = { [dotType] = {ParticleEmitter, ...} }
 
@@ -288,6 +292,18 @@ function DoT.Apply(humanoid: Humanoid, opts)
 	if not config then
 		warn("[DoT] Unknown DoT type:", dotType)
 		return
+	end
+
+	-- SFX 3D: tocar no modelo afetado
+	do
+		local sfxPart = model:FindFirstChild("HumanoidRootPart") or model.PrimaryPart
+		if sfxPart then
+			if dotType == "burn" then
+				SFXHelper.playAt(sfxPart, BURN_SFX_ID, 0.75, { minDist = 10, maxDist = 60, lifetime = 2 })
+			elseif dotType == "bleed" then
+				SFXHelper.playAt(sfxPart, BLEED_SFX_ID, 0.75, { minDist = 10, maxDist = 60, lifetime = 2 })
+			end
+		end
 	end
 	
 	local playerDamage = math.max(0, tonumber(opts and opts.playerDamage) or 0)

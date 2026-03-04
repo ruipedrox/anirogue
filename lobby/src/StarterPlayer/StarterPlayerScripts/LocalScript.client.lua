@@ -158,6 +158,20 @@ UserInputService.InputBegan:Connect(function(input, gpe)
 		end
 		-- short debounce
 		task.delay(0.5, function() _debugGiveCooldown = false end)
+	elseif input.KeyCode == Enum.KeyCode.M then
+		-- Debug: request server to give 10 copies of each item (for evolve testing)
+		if _debugGiveCooldown then return end
+		_debugGiveCooldown = true
+		if DebugGiveTestItems then
+			-- send a payload asking the server to grant all items x10
+			-- server should handle the payload; if it ignores it, the call is still safe
+			DebugGiveTestItems:FireServer({action = "give_all", amount = 10})
+			print("[DebugGiveTestItems] requested 10 of each item")
+		else
+			warn("[DebugGiveTestItems] Remote not found")
+		end
+		-- short debounce
+		task.delay(0.5, function() _debugGiveCooldown = false end)
 	end
 end)
 

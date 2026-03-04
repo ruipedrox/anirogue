@@ -5,6 +5,25 @@ local Players = game:GetService("Players")
 local player = Players.LocalPlayer
 local playerGui = player:WaitForChild("PlayerGui")
 local TweenService = game:GetService("TweenService")
+local SoundService = game:GetService("SoundService")
+local Debris = game:GetService("Debris")
+local ReplicatedStorageTop = game:GetService("ReplicatedStorage")
+
+-- UI click sound helper
+local function playClickSFX()
+	local ok, sounds = pcall(function()
+		return require(ReplicatedStorageTop:WaitForChild("Shared"):WaitForChild("Sounds"):WaitForChild("Sounds"))
+	end)
+	local id = (ok and sounds and sounds.UI_CLICK) or 87437544236708
+	if id == 0 then return end
+	local sfxMult = math.clamp((player:GetAttribute("SFXVolume") or 50) / 100, 0, 1)
+	local s = Instance.new("Sound")
+	s.SoundId = "rbxassetid://" .. tostring(id)
+	s.Volume = 0.6 * sfxMult
+	s.Parent = SoundService
+	s:Play()
+	Debris:AddItem(s, 4)
+end
 
 local generalRoot = script.Parent
 local leftGui = generalRoot:WaitForChild("Left_gui")
@@ -13,6 +32,7 @@ local btnEquip = leftGui:FindFirstChild("Equip") or leftGui:WaitForChild("Equip"
 local btnCodes = leftGui:FindFirstChild("Codes") or leftGui:WaitForChild("Codes")
 local btnMissions = leftGui:FindFirstChild("Missions") or leftGui:WaitForChild("Missions")
 local btnInv = leftGui:FindFirstChild("Inv") or leftGui:FindFirstChild("Inv", true)
+local btnSettings = leftGui:FindFirstChild("Settings")
 
 -- Referências a contadores de moedas/gemas (estrutura mostrada na imagem)
 local botGui = generalRoot:FindFirstChild("Bot_gui") or generalRoot:WaitForChild("Bot_gui")
@@ -486,6 +506,15 @@ local function toggleChars()
 		end
 			-- Close Codes/Missions to avoid them staying open
 			closeCodesAndMissions()
+		-- Close Settings if open
+		local settingsGuiC = playerGui:FindFirstChild("Settings") or playerGui:FindFirstChild("Settings", true)
+		if settingsGuiC then
+			for _, ls in ipairs(settingsGuiC:GetDescendants()) do
+				if ls:IsA("LocalScript") then
+					pcall(function() ls:SetAttribute("Hide", true) ls:SetAttribute("Show", false) end)
+				end
+			end
+		end
 
 		-- Close Inv if it's open so only one panel remains visible
 		local invGui = playerGui:FindFirstChild("Inv") or playerGui:FindFirstChild("Inv", true)
@@ -554,6 +583,15 @@ local function toggleEquip()
 		end
 			-- Close Codes/Missions to avoid them staying open
 			closeCodesAndMissions()
+		-- Close Settings if open
+		local settingsGuiE = playerGui:FindFirstChild("Settings") or playerGui:FindFirstChild("Settings", true)
+		if settingsGuiE then
+			for _, ls in ipairs(settingsGuiE:GetDescendants()) do
+				if ls:IsA("LocalScript") then
+					pcall(function() ls:SetAttribute("Hide", true) ls:SetAttribute("Show", false) end)
+				end
+			end
+		end
 
 		-- Close Inv if it's open so only one panel remains visible
 		local invGui = playerGui:FindFirstChild("Inv") or playerGui:FindFirstChild("Inv", true)
@@ -586,8 +624,12 @@ local function getMissionsGui()
 	return playerGui:FindFirstChild("Missions") or playerGui:FindFirstChild("Missions", true)
 end
 
+local function getSettingsGui()
+	return playerGui:FindFirstChild("Settings") or playerGui:FindFirstChild("Settings", true)
+end
+
 local function closeAllPanels(nameToKeep)
-	local panels = {"Codes","Missions","Chars","Equip","Inv"}
+	local panels = {"Codes","Missions","Chars","Equip","Inv","Settings"}
 	for _, nm in ipairs(panels) do
 		if not nameToKeep or nm ~= nameToKeep then
 			local g = playerGui:FindFirstChild(nm) or playerGui:FindFirstChild(nm, true)
@@ -702,6 +744,44 @@ local function toggleCodes()
 	task.delay(0.05, function() toggleDebounce = false end)
 end
 
+-- Settings toggle
+local function toggleSettings()
+	if toggleDebounce then return end
+	local now = tick()
+	if (now - lastToggle) < toggleCooldown then return end
+	lastToggle = now
+	toggleDebounce = true
+
+	local settingsGui = getSettingsGui()
+	if not settingsGui then
+		warn("[GeneralUI] Settings GUI não encontrado")
+		toggleDebounce = false
+		return
+	end
+	local localScript = settingsGui:FindFirstChild("LocalScript") or settingsGui:FindFirstChildWhichIsA("LocalScript", true)
+	if not localScript then
+		warn("[GeneralUI] LocalScript de Settings não encontrado")
+		toggleDebounce = false
+		return
+	end
+	local firstFrame = settingsGui:FindFirstChild("1st") or settingsGui:FindFirstChild("1st", true)
+	local isVisible = firstFrame and firstFrame.Visible
+	if isVisible then
+		localScript:SetAttribute("Hide", true)
+		localScript:SetAttribute("Show", false)
+	else
+		localScript:SetAttribute("Show", false)
+		localScript:SetAttribute("Hide", false)
+		task.delay(0.02, function()
+			if not (firstFrame and firstFrame.Visible) then
+				closeAllPanels("Settings")
+				localScript:SetAttribute("Show", true)
+			end
+		end)
+	end
+	task.delay(0.05, function() toggleDebounce = false end)
+end
+
 -- Missions button connect
 if btnMissions and btnMissions:IsA("ImageButton") then
 	btnMissions.MouseButton1Click:Connect(function()
@@ -732,12 +812,15 @@ if btnMissions and btnMissions:IsA("ImageButton") then
 	end)
 end
 
--- Connect Codes / Inv buttons
+-- Connect Codes / Inv / Settings buttons
 if btnCodes and btnCodes:IsA("ImageButton") then
 	btnCodes.MouseButton1Click:Connect(toggleCodes)
 end
 if btnInv and btnInv:IsA("ImageButton") then
 	btnInv.MouseButton1Click:Connect(toggleInv)
+end
+if btnSettings and btnSettings:IsA("ImageButton") then
+	btnSettings.MouseButton1Click:Connect(toggleSettings)
 end
 
 -- Permitir clicar em um slot equipado para abrir inventário já focado naquele personagem
@@ -793,6 +876,7 @@ function setupSlotClickHandlers()
                     icon:SetAttribute("ClickHooked2", true)
                     icon.InputBegan:Connect(function(input)
                         if input.UserInputType == Enum.UserInputType.MouseButton1 then
+                            playClickSFX()
                             local order = _lastEquippedOrder or {}
                             local instId = order[idx]
                             if instId and instId ~= "" and instId ~= "_EMPTY_" then

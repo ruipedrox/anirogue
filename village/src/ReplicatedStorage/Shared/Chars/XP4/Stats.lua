@@ -3,7 +3,7 @@ local XP4Stats = {}
 -- XP Monster Tier 4 - evolução intermediária
 XP4Stats.name = "XP Golem"
 XP4Stats.stars = 2
-XP4Stats.icon = 92749049461009 -- Usando mesmo icon do evolve_core temporariamente
+XP4Stats.icon = 129358586616311 -- Usando mesmo icon do evolve_core temporariamente
 
 -- Stats baixos - usado principalmente para evolução
 XP4Stats.Passives = {

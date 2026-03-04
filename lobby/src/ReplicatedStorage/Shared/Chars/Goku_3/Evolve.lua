@@ -3,9 +3,9 @@
 return {
     evolve_to = "Goku_4",
     required_level = 1,
-    cost = { Gold = 0 },
+    cost = { Gold = 1000 },
     copies_req = { { template = "Goku_3", count = 3 } },
-    copies_mode = "excluding",
+    copies_mode = "including",
     materials_req = {
         { template = "EvolveShard", count = 2 },
         { template = "WishBall", count = 3 },

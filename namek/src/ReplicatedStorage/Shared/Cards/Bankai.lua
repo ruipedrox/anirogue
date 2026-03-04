@@ -4,6 +4,11 @@
 
 local ReplicatedStorage = game:GetService("ReplicatedStorage")
 
+local ScriptsFolder = ReplicatedStorage:WaitForChild("Scripts")
+local SFXHelper = require(ScriptsFolder:WaitForChild("SFXHelper"))
+
+local BANKAI_SFX_ID = 84258361694086
+
 local def = {
 	Name = "Bankai",
 	Rarity = "Epic/Legendary",
@@ -55,7 +60,20 @@ local function addUpgrade(player, name, delta)
 end
 
 function def.OnCardAdded(player: Player, cardData, currentLevel: number)
-	local level = math.clamp(currentLevel or 1, 1, def.MaxLevel)
+	local maxLv = (type(cardData) == "table" and tonumber(cardData.maxLevel)) or def.MaxLevel
+	local level = math.clamp(currentLevel or 1, 1, maxLv)
+
+	-- Regista nível no RunTrack para que CardPool pare de oferecer ao atingir max level
+	do
+		local cardId = (type(cardData) == "table" and cardData.id) or "Ichigo_Epic_Bankai"
+		local runTrack = player:FindFirstChild("RunTrack")
+		if not runTrack then runTrack = Instance.new("Folder") runTrack.Name = "RunTrack" runTrack.Parent = player end
+		local myFolder = runTrack:FindFirstChild(cardId) or Instance.new("Folder")
+		myFolder.Name = cardId; myFolder.Parent = runTrack
+		local lvlNV = myFolder:FindFirstChild("Level") or Instance.new("IntValue")
+		lvlNV.Name = "Level"; lvlNV.Value = level; lvlNV.Parent = myFolder
+	end
+
 	local stats = statsPerLevel[level]
 	
 	if not stats then
@@ -81,6 +99,13 @@ function def.OnCardAdded(player: Player, cardData, currentLevel: number)
 		stats.attackSpeedPercent,
 		stats.critDamagePercent
 	))
+
+	-- SFX ao escolher Bankai
+	local char = player.Character
+	local hrp = char and char:FindFirstChild("HumanoidRootPart")
+	if hrp then
+		SFXHelper.playAt(hrp, BANKAI_SFX_ID, 0.9, { minDist = 15, maxDist = 80, lifetime = 6 })
+	end
 	
 	-- Reapply stats
 	pcall(function()

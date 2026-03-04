@@ -2,8 +2,8 @@ local Players = game:GetService("Players")
 local ReplicatedStorage = game:GetService("ReplicatedStorage")
 local player = Players.LocalPlayer
 
-local Remotes = ReplicatedStorage:WaitForChild("Remotes")
-local DebugInit = Remotes:WaitForChild("DebugInit")
+local Remotes = ReplicatedStorage:WaitForChild("Remotes", 15)
+local DebugInit = Remotes and Remotes:WaitForChild("DebugInit", 10)
 
 local function showPayload(payload)
     local gui = player:FindFirstChildOfClass("PlayerGui")

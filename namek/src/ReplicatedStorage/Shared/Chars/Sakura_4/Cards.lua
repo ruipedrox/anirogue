@@ -19,7 +19,7 @@ SakuraCards.Definitions = {
 				[3] = 0.15,  -- Level 3: 15% of BaseDamage
 			},
 			maxLevel = 3,
-			image = "rbxassetid://0", -- Substitui com ID do ícone
+			image = "rbxassetid://84746569372023", -- Substitui com ID do ícone
 		}
 	},
 }

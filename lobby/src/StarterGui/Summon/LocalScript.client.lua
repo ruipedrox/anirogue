@@ -320,8 +320,30 @@ local function openSummonUI()
         return grad
     end
 
-    -- Função simples para abrir o preview com o ícone clicado
-    local function openPreview(iconImage, stars)
+    -- SFX helpers (rarity reveal)
+    local _sfxSs = game:GetService("SoundService")
+    local _sfxDb = game:GetService("Debris")
+    local function playSummonSFX(id)
+        if not id or id == 0 then return end
+        local sfxMult = math.clamp((game:GetService("Players").LocalPlayer:GetAttribute("SFXVolume") or 50) / 100, 0, 1)
+        local s = Instance.new("Sound")
+        s.SoundId = "rbxassetid://" .. tostring(id)
+        s.Volume = 0.8 * sfxMult
+        s.Parent = _sfxSs
+        s:Play()
+        _sfxDb:AddItem(s, 6)
+    end
+
+    -- Função simples para abrir o preview; prefira receber `entry.id`/`displayName`/`iconId`
+    local function openPreview(charIdOrNil, stars, displayNameArg, iconIdArg)
+        -- play rarity sound based on stars
+        pcall(function()
+            local n = tonumber(stars) or 0
+            local isRare = n >= 5
+                or (type(stars) == "string" and stars:lower():match("legend") ~= nil)
+            local id = isRare and 9045122943 or 109727714379123
+            playSummonSFX(id)
+        end)
         local previewFrameCurrent = frame:FindFirstChild("Preview")
         print("[SummonUI][Preview] Preview frame:", previewFrameCurrent and previewFrameCurrent.Name or "nil", previewFrameCurrent and previewFrameCurrent.ClassName or "nil")
         local icon_c = previewFrameCurrent and previewFrameCurrent:FindFirstChild("Icon_c")
@@ -349,42 +371,58 @@ local function openSummonUI()
         -- Set character name in preview using CharacterCatalog
     if charNameLabel and charNameLabel:IsA("TextLabel") then
             local bannerJson = getCurrentBannerJson()
-            local displayName = "?"
-            local charId = nil
-            -- Tenta obter o id diretamente do banner (entry.id) ou do catálogo
-            if bannerJson and bannerJson ~= "" then
-                local ok, decoded = pcall(function() return HttpService:JSONDecode(bannerJson) end)
-                if ok and decoded and decoded.entries then
-                    for _, entry in ipairs(decoded.entries) do
-                        if entry.icon_id == iconImage then
-                            charId = entry.id
-                            break
+            local displayName = displayNameArg or "?"
+            local resolvedId = nil
+            -- Prefer explicit id passed by caller
+            if charIdOrNil and type(charIdOrNil) == "string" and #charIdOrNil > 0 then
+                resolvedId = charIdOrNil
+            end
+            -- If no explicit id, try to resolve using iconIdArg or current preview text or banner
+            if not resolvedId then
+                if iconIdArg and type(iconIdArg) == "string" then
+                    local ok, decoded = pcall(function() return HttpService:JSONDecode(bannerJson or "") end)
+                    if ok and decoded and decoded.entries then
+                        for _, entry in ipairs(decoded.entries) do
+                            if entry.icon_id == iconIdArg or entry.id == iconIdArg then
+                                resolvedId = entry.id
+                                break
+                            end
+                        end
+                    end
+                    if not resolvedId then
+                        local ReplicatedStorage = game:GetService("ReplicatedStorage")
+                        local CharacterCatalog = require(ReplicatedStorage:WaitForChild("Scripts"):WaitForChild("CharacterCatalog"))
+                        local all = CharacterCatalog:GetAllMap()
+                        for tpl, entry in pairs(all) do
+                            if entry and (entry.icon_id == iconIdArg or entry.icon == iconIdArg) then
+                                resolvedId = tpl
+                                break
+                            end
                         end
                     end
                 end
             end
-            -- Se não encontrar, tenta pegar do catálogo pelo id do personagem (não pelo icon_id)
-            if not charId then
-                -- Se o preview já tem o nome/id do personagem, usa ele
-                if charNameLabel and charNameLabel.Text and charNameLabel.Text ~= "[ID não encontrado]" then
-                    -- Tenta extrair o id do texto se possível
-                    local possibleId = charNameLabel.Text:match("%[(.-)%]")
-                    if possibleId and #possibleId > 0 then
-                        charId = possibleId
-                    end
+            -- Fallback: try to parse text in preview if still missing
+            if not resolvedId and charNameLabel and charNameLabel.Text and charNameLabel.Text ~= "[ID não encontrado]" then
+                local possibleId = charNameLabel.Text:match("%[(.-)%]")
+                if possibleId and #possibleId > 0 then
+                    resolvedId = possibleId
                 end
             end
-            selectedCharId = charId -- Atualiza personagem selecionado para Card_b
+            selectedCharId = resolvedId -- Atualiza personagem selecionado para Card_b
+            charId = resolvedId
             local ReplicatedStorage = game:GetService("ReplicatedStorage")
             local CharacterCatalog = require(ReplicatedStorage:WaitForChild("Scripts"):WaitForChild("CharacterCatalog"))
             local catalogEntry = nil
-            if charId then
-                catalogEntry = CharacterCatalog:Get(charId)
+            if resolvedId then
+                catalogEntry = CharacterCatalog:Get(resolvedId)
                 if catalogEntry and catalogEntry.displayName then
                     displayName = catalogEntry.displayName
                 else
-                    displayName = charId
+                    displayName = resolvedId
                 end
+            elseif displayNameArg and #displayNameArg > 0 then
+                displayName = displayNameArg
             else
                 displayName = "[ID não encontrado]"
             end
@@ -397,18 +435,18 @@ local function openSummonUI()
                 resolvedTemplate = catalogEntry.template
             end
             -- Se não tivemos catalogEntry válido, procurar pelo icon_id no catálogo
-            if not resolvedTemplate then
+            if not resolvedTemplate and iconIdArg then
                 local all = CharacterCatalog:GetAllMap()
                 for tpl, entry in pairs(all) do
-                    if entry and entry.icon_id == iconImage then
+                    if entry and (entry.icon_id == iconIdArg or entry.icon == iconIdArg) then
                         resolvedTemplate = tpl
                         break
                     end
                 end
             end
             -- Fallback: se banner forneceu um id que parece ser o template, usa-o
-            if not resolvedTemplate and charId and type(charId) == "string" then
-                resolvedTemplate = charId
+            if not resolvedTemplate and resolvedId and type(resolvedId) == "string" then
+                resolvedTemplate = resolvedId
             end
             selectedCharId = resolvedTemplate
             print("[SummonUI][Preview] selectedCharId resolved to:", selectedCharId)
@@ -499,8 +537,12 @@ local function openSummonUI()
         end
         if previewFrameCurrent and previewIconCurrent then
             previewFrameCurrent.Visible = true
-            previewIconCurrent.Image = iconImage
-            print("[SummonUI][Preview] Preview aberto! Icon atualizado para:", iconImage)
+            -- Choose a safe icon: explicit argument, catalog entry, or fallback placeholder
+            local iconToSet = iconIdArg
+            if (not iconToSet or iconToSet == "") and catalogEntry and catalogEntry.icon_id then iconToSet = catalogEntry.icon_id end
+            if (not iconToSet or iconToSet == "") then iconToSet = "rbxassetid://0" end
+            pcall(function() previewIconCurrent.Image = iconToSet end)
+            print("[SummonUI][Preview] Preview aberto! Icon atualizado para:", iconToSet)
         else
             print("[SummonUI][Preview] Falha ao abrir preview: previewFrameCurrent=", tostring(previewFrameCurrent), "previewIconCurrent=", tostring(previewIconCurrent))
         end
@@ -626,8 +668,8 @@ local function openSummonUI()
                             warn(string.format("[SummonUI] Frame %s: Não encontrado icon_id para: %s", unitFrame.Name, entry.id))
                         end
                         icon.MouseButton1Click:Connect(function()
-                            print(string.format("[SummonUI] [DEBUG] Click detectado em %s (icon=%s)", unitFrame.Name, icon.Image))
-                            openPreview(icon.Image, entry.rarity)
+                            print(string.format("[SummonUI] [DEBUG] Click detectado em %s (entry.id=%s icon=%s)", unitFrame.Name, tostring(entry.id), tostring(icon.Image)))
+                            openPreview(entry.id, entry.rarity, entry.displayName, entry.icon_id)
                         end)
                         print(string.format("[SummonUI] Evento de click conectado para %s", unitFrame.Name))
                     else

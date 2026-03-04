@@ -28,6 +28,12 @@ local STATS do
 end
 
 local Damage = require(ReplicatedStorage:WaitForChild("Scripts"):WaitForChild("Combat"):WaitForChild("Damage"))
+local SFXHelper = require(ReplicatedStorage:WaitForChild("Scripts"):WaitForChild("SFXHelper"))
+local DASH_WINDUP_SFX_ID = 127758785414867
+local DASH_SFX_ID = 88520640334416
+local CUTS_SFX_ID = 100306486225962
+local TRIDENT_SFX_ID = 132700157248989
+local CERO_SFX_ID = 124992167032662
 
 -- Extract stat values
 local MOVE_SPEED = (STATS and STATS.MoveSpeed) or 16
@@ -336,6 +342,7 @@ local function tryDashSlash(now)
 	local direction = flatDirTo(targetRoot.Position)
 	
 	-- Telegraph windup
+	SFXHelper.playAt(root, DASH_WINDUP_SFX_ID, 0.8, { minDist = 10, maxDist = 80, lifetime = 3 })
 	local windup = playAnim("Dash_begin", 0.1, 1.0, 1.0)
 	local releaseWindupPose = holdLastKeyframePose(windup)
 	setFrozen(true)
@@ -418,6 +425,7 @@ local function tryDashSlash(now)
 	end
 	
 	-- Execute dash
+	SFXHelper.playAt(root, DASH_SFX_ID, 0.8, { minDist = 10, maxDist = 80, lifetime = 2 })
 	local dashAnim = playAnim("Dash", 0.05, 1.0, 1.2)
 	local dashSpeed = 130
 	local dashDuration = dashDist / dashSpeed
@@ -496,6 +504,7 @@ local function tryCeroBeam(now)
 	setFrozen(true)
 	
 	-- Charge phase (cero_charge animation)
+	SFXHelper.playAt(root, CERO_SFX_ID, 0.8, { minDist = 10, maxDist = 90, lifetime = 7 })
 	local chargeAnim = playAnim("cero_charge", 0.1, 1.0, 1.0)
 	
 	-- Wait for animation to reach last frame, then freeze it
@@ -669,7 +678,7 @@ local function tryCeroBeam(now)
 	end
 	
 	-- Beam rotation (moderate speed for tracking)
-	local ROTATION_SPEED = 0.15
+	local ROTATION_SPEED = 0.4
 	local beamStart = os.clock()
 	local BEAM_LENGTH = 200
 	
@@ -709,7 +718,7 @@ local function tryCeroBeam(now)
 						local closestPoint = ulqPos2D + beamDir * forwardDist
 						local lateralDist = (playerPos2D - closestPoint).Magnitude
 						
-						if lateralDist <= 8 then -- 8 studs beam width
+						if lateralDist <= 3 then -- 3 studs beam width
 							local waveMult = enemyModel:GetAttribute("DamageWaveMultiplier") or 1
 							Damage.Apply(hum, CERO_DAMAGE_TICK * waveMult)
 							damagedThisTick[hum] = true
@@ -749,6 +758,7 @@ local function tryTridentRain(now)
 	setFrozen(true)
 	
 	-- Play trident animation
+	SFXHelper.playAt(root, TRIDENT_SFX_ID, 0.8, { minDist = 10, maxDist = 90, lifetime = 4 })
 	local tridentAnim = playAnim("Trident", 0.1, 1.0, 1.0)
 	
 	-- Get spawn area bounds from WaveConfig (same as enemy spawn area)
@@ -935,6 +945,7 @@ local function try1000Cuts(now)
 	print("[Ulquiorra] 1000 CUTS STARTED")
 	
 	-- Play 1000_cuts animation
+	SFXHelper.playAt(root, CUTS_SFX_ID, 0.8, { minDist = 10, maxDist = 70, lifetime = 4 })
 	local cutsAnim = playAnim("1000_cuts", 0.1, 1.0, 1.0)
 	
 	-- Boost movement speed
@@ -1017,8 +1028,11 @@ task.spawn(function()
 			
 			if targetRoot then
 				print("[Ulquiorra] Target found! Dist:", math.floor(dist), "Frozen:", isFrozen())
-				-- Priority: Trident > Cero > Cuts > Dash
-				if now - lastTrident >= TRIDENT_INTERVAL then
+				-- Priority: Dash > Trident > Cero > Cuts
+				if now - lastDash >= DASH_INTERVAL and dist <= 60 then
+					print("[Ulquiorra] Trying DASH")
+					tryDashSlash(now)
+				elseif now - lastTrident >= TRIDENT_INTERVAL then
 					print("[Ulquiorra] Trying TRIDENT")
 					tryTridentRain(now)
 				elseif now - lastCero >= CERO_INTERVAL and dist <= CERO_RANGE then
@@ -1027,9 +1041,6 @@ task.spawn(function()
 				elseif now - lastCuts >= CUTS_INTERVAL and dist <= 50 then
 					print("[Ulquiorra] Trying 1000 CUTS")
 					try1000Cuts(now)
-				elseif now - lastDash >= DASH_INTERVAL and dist > 15 and dist <= 60 then
-					print("[Ulquiorra] Trying DASH")
-					tryDashSlash(now)
 				elseif not isFrozen() then
 					-- Always move toward player when not attacking (for 1000 Cuts positioning)
 					print("[Ulquiorra] Moving to player - Current WalkSpeed:", humanoid.WalkSpeed)

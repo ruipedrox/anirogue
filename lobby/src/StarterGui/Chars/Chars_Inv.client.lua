@@ -70,6 +70,7 @@ local unequipButton = previewInner:FindFirstChild("Unequip_b")
 local cardButton = previewInner:FindFirstChild("Card_b") -- novo botão para abrir UI de cartas
 local sellButton = previewInner:FindFirstChild("Sell_b") -- botão de vender
 local feedButton = previewInner:FindFirstChild("Feed_b")
+local evolveButton = previewInner:FindFirstChild("Evolve_b") or previewInner:FindFirstChild("Evolve")
 
 -- Painel de upgrade de espaço (Space_up)
 local spacePanel = frame:FindFirstChild("Space_up") or rootGui:FindFirstChild("Space_up")
@@ -159,15 +160,22 @@ local function addStatLine(statName, value)
 	clone.Visible = true
 	local textLabel = clone:FindFirstChild("stat_text", true)
 	if textLabel and textLabel:IsA("TextLabel") then
-		if type(value) == "number" then
-			-- arredondar
-			value = math.floor(value + 0.5)
-		end
 		local displayName = statName
+		if type(value) == "number" then
+			if statName == "xpgainrate" then
+				-- mostrar com 1 casa decimal (ex: 1.2)
+				value = string.format("%.1f", value)
+			else
+				-- arredondar inteiro para os demais stats
+				value = tostring(math.floor(value + 0.5))
+			end
+		end
 		if statName == "potencial" then
 			displayName = "Potencial" -- capital P
 		elseif statName == "BaseDamage" then
 			displayName = "Damage"
+		elseif statName == "xpgainrate" then
+			displayName = "xp multiplier"
 		end
 		textLabel.Text = string.format("%s: %s", displayName, tostring(value))
 	end
@@ -624,7 +632,10 @@ local function updatePreview(inst)
 	-- Apenas stats da tabela Stats (já processados em inst.Preview.Stats)
 	local stats = (inst.Preview and inst.Preview.Stats) or {}
 	for k,v in pairs(stats) do
-		addStatLine(k, v)
+		local keyLower = tostring(k):lower()
+		if keyLower ~= "potencial" and keyLower ~= "potential" then
+			addStatLine(k, v)
+		end
 	end
 
 	-- Atualizar visibilidade dos botões Equip / Unequip usando util
@@ -744,6 +755,111 @@ if feedButton then
 			if input.UserInputType == Enum.UserInputType.MouseButton1 then
 				handleFeedClick()
 			end
+		end)
+	end
+end
+
+-- Evolve button: show Evolve UI (Frame '2nd') if character can evolve
+if evolveButton then
+	local Players = game:GetService("Players")
+	local player = Players.LocalPlayer
+	local function handleEvolveClick()
+		if not selectedInstanceId then
+			warn("[CharsUI] Evolve clicked but no character selected")
+			return
+		end
+		-- Check if we have currentInventory and the instance
+		local inst = currentInventory and currentInventory.Instances and currentInventory.Instances[selectedInstanceId]
+		if not inst then
+			warn("[CharsUI] Evolve: instance not found in currentInventory")
+			return
+		end
+		-- Try to load Evolve rules from ReplicatedStorage.Shared.Chars
+		local ok, evolveRules = pcall(function()
+			local Shared = game:GetService("ReplicatedStorage"):WaitForChild("Shared")
+			local chars = Shared:FindFirstChild("Chars")
+			if not chars then return nil end
+			local folder = chars:FindFirstChild(tostring(inst.TemplateName or inst.Template or ""))
+			if not folder then return nil end
+			local m = folder:FindFirstChild("Evolve")
+			if not m or not m:IsA("ModuleScript") then return nil end
+			return require(m)
+		end)
+		if not ok then
+			warn("[CharsUI] failed to require Evolve module:", evolveRules)
+			return
+		end
+		if not evolveRules or type(evolveRules.evolve_to) ~= "string" then
+			-- cannot evolve
+			return
+		end
+
+		-- Show Evolve UI
+		local pg = player and player:FindFirstChild("PlayerGui") or player:WaitForChild("PlayerGui")
+		if not pg then warn("[CharsUI] PlayerGui not found for Evolve UI") return end
+		local evolveGui = pg:FindFirstChild("Evolve") or pg:FindFirstChild("Evolve", true)
+		if not evolveGui then
+			-- fallback: search for any ScreenGui with 'evolve' in name
+			for _, g in ipairs(pg:GetChildren()) do
+				if g:IsA("ScreenGui") and string.find(string.lower(tostring(g.Name)), "evolve") then
+					evolveGui = g
+					break
+				end
+			end
+		end
+		if not evolveGui then
+			warn("[CharsUI] Evolve ScreenGui not found in PlayerGui")
+			return
+		end
+		-- Try bindable event 'SetMain' like other UIs
+		local setMain = evolveGui:FindFirstChild("SetMain")
+		-- Resolve icon asset (prefer instance.Catalog.icon_id, fallback to CharacterCatalog)
+		local iconAsset = nil
+		local templateName = tostring(inst.TemplateName or inst.Template or "")
+		pcall(function()
+			if inst.Catalog and inst.Catalog.icon_id then
+				iconAsset = inst.Catalog.icon_id
+			else
+				-- lazy require CharacterCatalog if available
+				local ReplicatedStorage = game:GetService("ReplicatedStorage")
+				local scripts = ReplicatedStorage:FindFirstChild("Scripts")
+				if scripts and scripts:FindFirstChild("CharacterCatalog") then
+					local ok, cat = pcall(require, scripts:FindFirstChild("CharacterCatalog"))
+					if ok and cat and cat.Get then
+						local ok2, cobj = pcall(function() return cat:Get(templateName) end)
+						if ok2 and cobj and cobj.icon_id then iconAsset = cobj.icon_id end
+					end
+				end
+			end
+		end)
+		-- Fire SetMain or set attributes so Evolve UI can populate the Before icon
+		if setMain and setMain:IsA("BindableEvent") then
+			pcall(function() setMain:Fire(selectedInstanceId, iconAsset, templateName) end)
+		else
+			pcall(function()
+				evolveGui:SetAttribute("EvolveMain", selectedInstanceId)
+				if evolveGui.SetAttribute then evolveGui:SetAttribute("EvolveMainIcon", iconAsset or "") end
+			end)
+		end
+		-- Make frame '2nd' visible if present
+		local frame2 = evolveGui:FindFirstChild("2nd") or evolveGui:FindFirstChild("Frame") and evolveGui:FindFirstChild("Frame"):FindFirstChild("2nd")
+		if frame2 and frame2:IsA("GuiObject") then
+			frame2.Visible = true
+		else
+			-- fallback: try to find any descendant named '2nd'
+			local found = nil
+			for _, d in ipairs(evolveGui:GetDescendants()) do
+				if d:IsA("GuiObject") and d.Name == "2nd" then found = d break end
+			end
+			if found then found.Visible = true end
+		end
+	end
+
+	if evolveButton:IsA("ImageButton") or evolveButton:IsA("TextButton") then
+		evolveButton.MouseButton1Click:Connect(handleEvolveClick)
+	else
+		evolveButton.InputBegan:Connect(function(input)
+			if input.UserInputType == Enum.UserInputType.MouseButton1 then handleEvolveClick() end
 		end)
 	end
 end

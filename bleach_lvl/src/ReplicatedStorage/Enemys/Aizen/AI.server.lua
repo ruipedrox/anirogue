@@ -27,6 +27,10 @@ local STATS do
 end
 
 local Damage = require(ReplicatedStorage:WaitForChild("Scripts"):WaitForChild("Combat"):WaitForChild("Damage"))
+local SFXHelper = require(ReplicatedStorage:WaitForChild("Scripts"):WaitForChild("SFXHelper"))
+local NORMAL_ATTACK_SFX_ID = 124209098662760
+local HADO_SFX_ID = 120721852291895
+local CLONE_SFX_ID = 75198591359868
 
 -- Extract stat values
 local MOVE_SPEED = (STATS and STATS.MoveSpeed) or 16
@@ -211,6 +215,7 @@ local function tryNormalAttack(now)
 	root.CFrame = CFrame.lookAt(root.Position, root.Position + dir, Vector3.yAxis)
 	
 	-- Play attack animation
+	SFXHelper.playAt(root, NORMAL_ATTACK_SFX_ID, 0.7, { minDist = 10, maxDist = 70, lifetime = 2 })
 	local attackAnim = playAnim("aizen_normal", 0.1, 1.0, 1.0)
 	
 	if attackAnim then
@@ -246,6 +251,7 @@ local function tryHado90(now)
 	root.CFrame = CFrame.lookAt(root.Position, root.Position + dir, Vector3.yAxis)
 	
 	-- Play Hado animation
+	SFXHelper.playAt(root, HADO_SFX_ID, 0.8, { minDist = 10, maxDist = 90, lifetime = 6 })
 	local hadoAnim = playAnim("Hado", 0.1, 1.0, 1.0)
 	
 	-- Spawn True_Hado90 model on player
@@ -400,6 +406,7 @@ local function tryKyokaSuigetsu(now)
 	enemyModel:SetAttribute("Invulnerable", true)
 	
 	-- Play Trick animation
+	SFXHelper.playAt(root, TRICK_SFX_ID, 0.8, { minDist = 10, maxDist = 80, lifetime = 6 })
 	local trickAnim = playAnim("Trick", 0.1, 1.0, 1.0)
 	
 	-- Make Aizen semi-transparent
@@ -452,6 +459,7 @@ local function tryCloneIllusion(now)
 	pushActionLock()
 	
 	-- Play Clone animation with events
+	SFXHelper.playAt(root, CLONE_SFX_ID, 0.8, { minDist = 10, maxDist = 80, lifetime = 3 })
 	local cloneAnim = playAnim("Clones", 0.1, 1.0, 1.0)
 	
 	-- Find Aizen's sword to fade
@@ -513,7 +521,6 @@ local function tryCloneIllusion(now)
 		endFadeConn = cloneAnim:GetMarkerReachedSignal("end_fade"):Connect(function()
 			if not clonesSpawned then
 				clonesSpawned = true
-				
 				print("[Aizen] Spawning clones...")
 				
 				-- Spawn 4 clones around Aizen

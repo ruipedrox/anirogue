@@ -58,9 +58,13 @@ function StatsPreview:Build(templateName, level, tier)
     local base = self:GetBaseStats(templateName)
     local tierMult = CharacterTiers:GetMultiplier(tier)
     -- Aplica multiplicador de Tier
+    -- NOTE: xpgainrate should NOT be affected by Tier (only by Level),
+    -- so skip scaling it here to keep Potential/Tier from changing XP multiplier.
     for k,v in pairs(base) do
         if type(v) == "number" then
-            base[k] = v * tierMult
+            if tostring(k):lower() ~= "xpgainrate" then
+                base[k] = v * tierMult
+            end
         end
     end
     -- Aplica scaling de Level

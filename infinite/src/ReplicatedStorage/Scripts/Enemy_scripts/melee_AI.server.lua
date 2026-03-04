@@ -4,6 +4,10 @@ local Players = game:GetService("Players")
 local ReplicatedStorage = game:GetService("ReplicatedStorage")
 local CollectionService = game:GetService("CollectionService")
 
+local ScriptsFolder = ReplicatedStorage:WaitForChild("Scripts")
+local SFXHelper = require(ScriptsFolder:WaitForChild("SFXHelper"))
+local MELEE_ATTACK_SFX_ID = 139897497838184
+
 local RANGE = 3
 local COOLDOWN = 0.5
 local DEFAULT_DAMAGE = 10
@@ -271,6 +275,7 @@ task.spawn(function()
 						if attackTrack and not attackTrack.IsPlaying then
 							attackTrack:Play()
 						end
+						SFXHelper.playAt(root, MELEE_ATTACK_SFX_ID, 0.8, { minDist = 5, maxDist = 60, lifetime = 1.5 })
 						phum:TakeDamage(dmg)
 						-- Apply invulnerability frames
 						local invs = getInvTimeSeconds(plr)

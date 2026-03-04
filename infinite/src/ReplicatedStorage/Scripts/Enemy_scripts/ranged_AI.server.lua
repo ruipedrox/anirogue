@@ -8,6 +8,8 @@ local RunService = game:GetService("RunService")
 
 local ScriptsFolder = ReplicatedStorage:WaitForChild("Scripts")
 local Projectile = require(ScriptsFolder:WaitForChild("Projectile"))
+local SFXHelper = require(ScriptsFolder:WaitForChild("SFXHelper"))
+local RANGED_SHOOT_SFX_ID = 127547700738199
 
 -- Find energyball model from Enemys/Attacks folder
 local EnemysFolder = ReplicatedStorage:WaitForChild("Enemys")
@@ -228,6 +230,7 @@ task.spawn(function()
 				local finalProjectileDamage = math.floor(pdmgBase * dmgMult + 0.5)
 
 				-- Fire energyball projectile
+				SFXHelper.playAt(root, RANGED_SHOOT_SFX_ID, 0.8, { minDist = 10, maxDist = 80, lifetime = 2 })
 				Projectile.Fire({
 					origin = origin,
 					direction = dir,

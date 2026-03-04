@@ -11,6 +11,7 @@ SasukeCards.Definitions = {
 			description = "The legendary dojutsu of the Uchiha clan. Increases critical hit chance and critical damage. Above 100% crit chance, gain additional crit multipliers.",
 			stackable = true,
 			maxLevel = 5,
+			image = "rbxassetid://90261560441199",
 			module = "Sharingan",
 		},
 		{
@@ -19,6 +20,7 @@ SasukeCards.Definitions = {
 			description = "Lightning blade technique. Your attacks chain lightning to nearby enemies, dealing electric damage.",
 			stackable = true,
 			maxLevel = 5,
+			image = "rbxassetid://76316091312843",
 			module = "Chidori",
 		},
 	},

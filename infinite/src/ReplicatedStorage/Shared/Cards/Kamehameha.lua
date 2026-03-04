@@ -9,6 +9,9 @@ local TweenService = game:GetService("TweenService")
 
 local ScriptsFolder = ReplicatedStorage:WaitForChild("Scripts")
 local Damage = require(ScriptsFolder:WaitForChild("Combat"):WaitForChild("Damage"))
+local SFXHelper = require(ScriptsFolder:WaitForChild("SFXHelper"))
+
+local KAMEHAMEHA_SFX_ID = 134575329727831
 
 local M = {}
 
@@ -218,8 +221,8 @@ function M.Start(player: Player)
 		local onInterval = upgrades and upgrades:FindFirstChild("OnInterval") or ensureFolder(ensureFolder(player, "Upgrades"), "OnInterval")
 		local cfg = onInterval:FindFirstChild("Kamehameha") or ensureFolder(onInterval, "Kamehameha")
 		local cooldownNV = ensureNumber(cfg, "Cooldown", 10)
-		local chargeNV = ensureNumber(cfg, "ChargeTime", 2)
-		local durationNV = ensureNumber(cfg, "BeamDuration", 3)
+		local chargeNV = ensureNumber(cfg, "ChargeTime", 3)
+		local durationNV = ensureNumber(cfg, "BeamDuration", 4)
 		local tickNV = ensureNumber(cfg, "TickInterval", 0.5)
 		local dmgPctNV = ensureNumber(cfg, "DamagePercent", 50)
 		local sizeScaleNV = ensureNumber(cfg, "SizeScale", 1)
@@ -281,6 +284,7 @@ function M.Start(player: Player)
 		pcall(function() charge:Destroy() end)
 
 		-- Fire beam
+		SFXHelper.playAt(hrp, KAMEHAMEHA_SFX_ID, 0.9, { minDist = 15, maxDist = 120, lifetime = durationNV.Value + 1 })
 		local beam = beamTemplate:Clone()
 		beam.Name = "Kamehameha_Instance"
 		beam.Parent = character
@@ -473,8 +477,8 @@ function M.Apply(player: Player, def)
 	local sizePerLevel = typeof(def.sizePerLevel) == "number" and def.sizePerLevel or 0.25
 	-- Extra bonus applied only at the final level (último nível)
 	local finalLevelExtra = typeof(def.finalLevelExtra) == "number" and def.finalLevelExtra or 0.25
-	local duration = typeof(def.duration) == "number" and def.duration or 3
-	local chargeTime = typeof(def.chargeTime) == "number" and def.chargeTime or 2
+	local duration = typeof(def.duration) == "number" and def.duration or 4
+	local chargeTime = typeof(def.chargeTime) == "number" and def.chargeTime or 3
 	local tickInterval = typeof(def.tickInterval) == "number" and def.tickInterval or 0.5
 
 	local effectiveCooldown = baseCooldown + cdPerLevel * (L - 1)

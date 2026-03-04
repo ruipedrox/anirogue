@@ -12,6 +12,7 @@ GojoCards.Definitions = {
 			description = "Slows enemies based on proximity. Closer enemies are slowed more. Lvl1: 10%-40% | Lvl5: 20%-80%",
 			stackable = false,
 			maxLevel = 5,
+			image = "rbxassetid://138257935037509",
 			module = "Infinity",
 		},
 		{
@@ -20,6 +21,7 @@ GojoCards.Definitions = {
 			description = "Fire repulsive force projectiles that damage and push enemies away.",
 			stackable = false,
 			maxLevel = 5,
+			image = "rbxassetid://126447845624162",
 			module = "RedShot",
 		},
 		{
@@ -28,6 +30,7 @@ GojoCards.Definitions = {
 			description = "Fire attractive force projectiles that damage and pull enemies inward.",
 			stackable = false,
 			maxLevel = 5,
+			image = "rbxassetid://88936494266860",
 			module = "BlueShot",
 		},
 	},
@@ -39,6 +42,7 @@ GojoCards.Definitions = {
 			description = "The imaginary mass. Devastating purple projectile that combines Red and Blue. Requires both at max level. Replaces Red and Blue.",
 			stackable = false,
 			maxLevel = 1,
+			image = "rbxassetid://88996889608340",
 			module = "PurpleShot",
 			requiredCards = {
 				{ cardId = "Gojo_RedShot", minLevel = 5 },

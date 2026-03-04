@@ -8,7 +8,7 @@ return {
 	GoldDrop = 750,
 	
 	-- Dash Slash (like Sasuke/Kenpachi)
-	DashInterval = 14,          -- seconds between dash attempts
+	DashInterval = 6,           -- seconds between dash attempts
 	DashTelegraph = 1.5,        -- preview duration before dash
 	DashRange = 50,             -- max dash travel distance
 	DashDamage = 350,           -- High dash impact damage
@@ -17,7 +17,7 @@ return {
 	DashPathTickRadius = 7,     -- radius around Ulquiorra during dash
 	
 	-- Cero (Kamehameha-like beam)
-	CeroInterval = 18,          -- seconds between cero attempts
+	CeroInterval = 15,          -- seconds between cero attempts
 	CeroCharge = 2.5,           -- charge duration (cero_charge animation)
 	CeroBeamDuration = 3.0,     -- beam active duration
 	CeroTickInterval = 0.3,     -- damage tick rate during beam
@@ -25,7 +25,7 @@ return {
 	CeroRange = 150,            -- beam travel distance
 	
 	-- Trident Rain
-	TridentInterval = 22,       -- seconds between trident attacks
+	TridentInterval = 18,       -- seconds between trident attacks
 	TridentCount = 5,           -- number of tridents to spawn
 	TridentFallDelay = 2.0,     -- delay before tridents fall (telegraph time)
 	TridentDamage = 280,        -- damage per trident impact
@@ -33,7 +33,7 @@ return {
 	TridentHeight = 60,         -- spawn height above ground
 	
 	-- 1000 Cuts (rapid cone damage)
-	CutsInterval = 20,          -- seconds between 1000 cuts
+	CutsInterval = 6,          -- seconds between 1000 cuts
 	CutsDuration = 3.0,         -- animation duration (1000_cuts)
 	CutsMoveSpeedBoost = 8,     -- extra movement speed during cuts
 	CutsDamagePerTick = 90,     -- damage per hit

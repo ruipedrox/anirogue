@@ -7,6 +7,8 @@ local RunService = game:GetService("RunService")
 
 local ScriptsFolder = ReplicatedStorage:WaitForChild("Scripts")
 local Projectile = require(ScriptsFolder:WaitForChild("Projectile"))
+local SFXHelper = require(ScriptsFolder:WaitForChild("SFXHelper"))
+local RANGED_ATTACK_SFX_ID = 137951817204948
 
 -- Shared Kunai assets (model + attack animation) so projectile & throw anim come from Shared folder
 local KunaiFolder = ReplicatedStorage:FindFirstChild("Shared")
@@ -338,6 +340,7 @@ task.spawn(function()
 				else
 					orientationOffset = CFrame.Angles(0, math.rad(-90), 0)
 				end
+				SFXHelper.playAt(root, RANGED_ATTACK_SFX_ID, 0.7, { minDist = 10, maxDist = 70, lifetime = 2 })
 				Projectile.Fire({
 					origin = origin,
 					direction = dir,

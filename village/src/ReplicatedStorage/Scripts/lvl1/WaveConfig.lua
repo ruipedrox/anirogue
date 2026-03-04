@@ -73,19 +73,4 @@ WaveConfig.Waves = {
     { enemies = { { id = "Zabuza", count = 1, position = Vector3.new(84.5, 42.877, -35.882) } } }, -- Wave 15 (Boss: Zabuza)
 }
 
---[[
--- Guardado aqui para referência: waves originais 6-15
--- Basta copiar de volta para dentro de WaveConfig.Waves se quiser reativar.
---    { enemies = { { id = "Melee Ninja", count = 10 }, { id = "Ranged Ninja", count = 3 } } }, -- Wave6
---    { enemies = { { id = "Melee Ninja", count = 11 }, { id = "Ranged Ninja", count = 4 } } }, -- Wave7
---    { enemies = { { id = "Melee Ninja", count = 12 }, { id = "Ranged Ninja", count = 5 } } }, -- Wave8
---    { enemies = { { id = "Melee Ninja", count = 13 }, { id = "Ranged Ninja", count = 6 } } }, -- Wave9
---    { enemies = { { id = "Gaara", count = 1 }, { id = "Melee Ninja", count = 10 }, { id = "Ranged Ninja", count = 4 } } }, -- Wave10 Boss
---    { enemies = { { id = "Melee Ninja", count = 14 }, { id = "Ranged Ninja", count = 6 } } }, -- Wave11
---    { enemies = { { id = "Melee Ninja", count = 15 }, { id = "Ranged Ninja", count = 7 } } }, -- Wave12
---    { enemies = { { id = "Melee Ninja", count = 14 }, { id = "Ranged Ninja", count = 7 }, { id = "Haku", count = 1 } } }, -- Wave13
---    { enemies = { { id = "Melee Ninja", count = 15 }, { id = "Ranged Ninja", count = 8 }, { id = "Haku", count = 1 } } }, -- Wave14
---    { enemies = { { id = "Sasuke Curse Mark", count = 1 }, { id = "Melee Ninja", count = 12 }, { id = "Ranged Ninja", count = 6 } } }, -- Wave15 Final Boss
-]]
-
 return WaveConfig

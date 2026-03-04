@@ -3,7 +3,25 @@
 local ReplicatedStorage = game:GetService("ReplicatedStorage")
 local Players = game:GetService("Players")
 local TweenService = game:GetService("TweenService")
+local SoundService = game:GetService("SoundService")
+local Debris = game:GetService("Debris")
 local player = Players.LocalPlayer
+
+-- UI click sound helper
+local function playClickSFX()
+	local ok, sounds = pcall(function()
+		return require(ReplicatedStorage:WaitForChild("Shared"):WaitForChild("Sounds"):WaitForChild("Sounds"))
+	end)
+	local id = (ok and sounds and sounds.UI_CLICK) or 87437544236708
+	if id == 0 then return end
+	local sfxMult = math.clamp((player:GetAttribute("SFXVolume") or 50) / 100, 0, 1)
+	local s = Instance.new("Sound")
+	s.SoundId = "rbxassetid://" .. tostring(id)
+	s.Volume = 0.6 * sfxMult
+	s.Parent = SoundService
+	s:Play()
+	Debris:AddItem(s, 4)
+end
 
 local remotes = ReplicatedStorage:WaitForChild("Remotes")
 local openRemote = remotes:FindFirstChild("Open_Upgrade") or remotes:WaitForChild("Open_Upgrade")
@@ -836,12 +854,14 @@ local function createIcon(group, instId, data)
 		-- Click handlers to open preview with the same icon
 		if icon:IsA("ImageButton") and icon.MouseButton1Click then
 			icon.MouseButton1Click:Connect(function()
+				playClickSFX()
 				showPrevWithImage(icon.Image, group, templateName, data, instId)
 			end)
 		elseif icon.InputBegan then
 			icon.InputBegan:Connect(function(input)
 				local t = input.UserInputType
 				if t == Enum.UserInputType.MouseButton1 or t == Enum.UserInputType.Touch then
+					playClickSFX()
 					showPrevWithImage(icon.Image, group, templateName, data, instId)
 				end
 			end)
@@ -852,6 +872,7 @@ local function createIcon(group, instId, data)
 		clone.InputBegan:Connect(function(input)
 			local t = input.UserInputType
 			if t == Enum.UserInputType.MouseButton1 or t == Enum.UserInputType.Touch then
+				playClickSFX()
 				local ic = icon or clone:FindFirstChild("Icon")
 				local img = (ic and ic:IsA("ImageLabel")) and ic.Image or (ic and ic:IsA("ImageButton") and ic.Image) or "rbxassetid://0"
 				showPrevWithImage(img, group, templateName, data, instId)

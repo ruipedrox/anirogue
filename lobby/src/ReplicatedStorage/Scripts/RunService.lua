@@ -78,6 +78,12 @@ function RunService:BuildTeleportPayload(player)
         },
         Seed = os.time(),
     }
+    -- Passa as preferências de volume para os run places
+    local s = profile.Meta and profile.Meta.Settings
+    payload.Settings = {
+        MusicVolume = (s and type(s.MusicVolume) == "number") and s.MusicVolume or 50,
+        SFXVolume   = (s and type(s.SFXVolume)   == "number") and s.SFXVolume   or 50,
+    }
     -- Compatibility: also expose character data at top-level for run place consumer
     -- vila/ReplicatedStorage/Scripts/CharacterInventory.lua expects these keys
     payload.CharacterInstances = charInstances

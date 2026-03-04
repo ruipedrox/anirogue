@@ -29,7 +29,7 @@ GokuCards.Definitions = {
 				"rbxassetid://109230445787601",  -- lvl4
 				"rbxassetid://73551236995978",  -- lvl5
 			},
-			image = "rbxassetid://101798892509110", -- fallback / nível 1
+			image = "rbxassetid://123420901878187", -- fallback / nível 1
 		}
 	},
 	Legendary = {
@@ -40,14 +40,15 @@ GokuCards.Definitions = {
 			-- Level scaling parameters
 			stackable = true,
 			maxLevel = 5,
-			image = "rbxassetid://73654392193315",
+			image = "rbxassetid://70708052011993",
 			module = "Kamehameha",
 			baseCooldown = 10, -- seconds at level 1
 			cooldownPerLevel = -1, -- per level change
 			baseDamagePercent = 10, -- percent of player's damage per tick at level 1
 			damagePercentPerLevel = 10, -- +10% per additional level
 			sizePerLevel = 0.20, -- +20% per additional level (relative to base)
-			duration = 3, -- beam active duration (seconds)
+			duration = 4, -- beam active duration (seconds)
+			chargeTime = 3, -- charge duration (seconds)
 		}
 	},
 	-- Stat cards moved to equipment; no Rare/Common stat entries here

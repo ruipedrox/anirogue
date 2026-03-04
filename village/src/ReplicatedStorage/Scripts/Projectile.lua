@@ -11,6 +11,7 @@ local CollectionService = game:GetService("CollectionService")
 
 local Projectile = {}
 local Damage = require(ReplicatedStorage:WaitForChild("Scripts"):WaitForChild("Combat"):WaitForChild("Damage"))
+local ProjectileStats = require(ReplicatedStorage:WaitForChild("Scripts"):WaitForChild("ProjectileStats"))
 
 -- Global tracking: map owner -> list of active projectile handles
 local OwnerProjectiles: {[Instance]: {ProjectileHandle}} = {}
@@ -412,7 +413,22 @@ function Projectile.Fire(params: FireParams): ProjectileHandle
             return
         end
 
-        local stepDist = params.speed * dt
+        -- Query modular projectile stat registry for best slow at this position,
+        -- but exclude the projectile owner's own aura so players don't slow their own shots.
+        local effectiveSpeed = params.speed
+        local ownerPlayer = nil
+        if params.owner then
+            if typeof(params.owner) == "Instance" then
+                if params.owner:IsA("Player") then
+                    ownerPlayer = params.owner
+                elseif params.owner:IsA("Model") then
+                    ownerPlayer = Players:GetPlayerFromCharacter(params.owner)
+                end
+            end
+        end
+        local bestSlow = ProjectileStats.GetBestSlowAtPosition(currentPos, ownerPlayer) or 0
+        effectiveSpeed = params.speed * math.max(0, 1 - bestSlow)
+        local stepDist = effectiveSpeed * dt
         local remaining = stepDist
         local pos = currentPos
 

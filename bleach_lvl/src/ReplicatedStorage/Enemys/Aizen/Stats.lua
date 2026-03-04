@@ -1,7 +1,7 @@
 -- Aizen Stats (Boss Bleach Level 3 - Final Boss)
 -- Strategic boss with 3 abilities: Normal Attack, Hado 90, Kyoka Suigetsu
 return {
-	Health = 15000,             -- Final boss health (higher than Ulquiorra)
+	Health = 150000,             -- Final boss health (higher than Ulquiorra)
 	MoveSpeed = 16,
 	Damage = 150,               -- High base damage
 	XPDrop = 1500,

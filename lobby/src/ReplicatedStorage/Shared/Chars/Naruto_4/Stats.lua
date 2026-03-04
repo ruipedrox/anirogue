@@ -3,7 +3,7 @@ local NarutoStats = {}
 -- Display metadata
 NarutoStats.name = "Fox Boy" -- renamed from Naruto for copyright-safe display
 NarutoStats.stars = 4
-NarutoStats.icon = 84864578966081
+NarutoStats.icon = 70456541518237
 -- Flag: whether this template supports evolution (UI reads from Stats)
 NarutoStats.can_evolve = true
 -- Base passive stats - MAJOR upgrade from 3★

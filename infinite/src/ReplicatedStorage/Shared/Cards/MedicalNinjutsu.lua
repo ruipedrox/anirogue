@@ -57,14 +57,27 @@ local function startHealingLoop(player: Player, level: number, interval: number,
 end
 
 function M.OnCardAdded(player: Player, cardData: {[string]: any}, currentLevel: number)
+	local level = currentLevel or 1
+
+	-- Regista nível no RunTrack para que CardPool pare de oferecer ao atingir max level
+	do
+		local cardId = (type(cardData) == "table" and cardData.id) or "Sakura_Heal"
+		local runTrack = player:FindFirstChild("RunTrack")
+		if not runTrack then runTrack = Instance.new("Folder") runTrack.Name = "RunTrack" runTrack.Parent = player end
+		local myFolder = runTrack:FindFirstChild(cardId) or Instance.new("Folder")
+		myFolder.Name = cardId; myFolder.Parent = runTrack
+		local lvlNV = myFolder:FindFirstChild("Level") or Instance.new("IntValue")
+		lvlNV.Name = "Level"; lvlNV.Value = level; lvlNV.Parent = myFolder
+	end
+
 	-- Extract card parameters
 	local interval = cardData.interval or 10
 	local healMultipliers = cardData.healMultiplier or {[1] = 0.5, [2] = 0.75, [3] = 1.0}
 	
-	print(string.format("[MedicalNinjutsu] Card added for %s at level %d", player.Name, currentLevel))
+	print(string.format("[MedicalNinjutsu] Card added for %s at level %d", player.Name, level))
 	
 	-- Start/restart healing loop with new level
-	startHealingLoop(player, currentLevel, interval, healMultipliers)
+	startHealingLoop(player, level, interval, healMultipliers)
 end
 
 function M.OnCardRemoved(player: Player, cardData: {[string]: any})

@@ -93,6 +93,10 @@ function BannerManager:Save(banner)
     local attempts = 0
     local maxAttempts = 3
     local delaySecs = 1
+    if not ds then
+        warn("[BannerManager] DataStore not available; skipping Save")
+        return false
+    end
     while attempts < maxAttempts do
         attempts = attempts + 1
         local ok, err = pcall(function()
@@ -111,6 +115,10 @@ function BannerManager:Load()
     local attempts = 0
     local maxAttempts = 3
     local delaySecs = 1
+    if not ds then
+        warn("[BannerManager] DataStore not available; Load returning nil")
+        return nil
+    end
     while attempts < maxAttempts do
         attempts = attempts + 1
         local ok, res = pcall(function()
@@ -167,17 +175,24 @@ local function GenerateRandomBannerFromCatalog()
     local pools = buildPoolsFromCatalog()
     -- Request: 1x 5★, 2x 4★, 3x 3★
     local entries = {}
+    local pickedSet = {}
     local function pushFrom(stars, count)
         local pool = pools[stars] or {}
-        local picks = sampleUnique(pool, count)
+        -- Filter out already-picked templates to guarantee global uniqueness
+        local filtered = {}
+        for _, id in ipairs(pool) do
+            if not pickedSet[id] then table.insert(filtered, id) end
+        end
+        local picks = sampleUnique(filtered, count)
         for _, id in ipairs(picks) do
+            pickedSet[id] = true
             local catEntry = CharacterCatalog and CharacterCatalog:Get(id)
             local icon_id = "rbxassetid://0"
+            local displayName = id
             if catEntry then
                 if catEntry.icon_id and type(catEntry.icon_id) == "string" and catEntry.icon_id:match("^rbxassetid://%d+$") then
                     icon_id = catEntry.icon_id
                 else
-                    -- Try to get icon from stats.icon field if icon_id is missing
                     if catEntry.icon and tonumber(catEntry.icon) then
                         icon_id = "rbxassetid://" .. tostring(catEntry.icon)
                         print(string.format("[BannerManager] icon_id missing, using stats.icon for %s: %s", id, icon_id))
@@ -185,11 +200,12 @@ local function GenerateRandomBannerFromCatalog()
                         warn(string.format("[BannerManager] Unit %s has invalid or missing icon_id, using fallback.", id))
                     end
                 end
+                displayName = catEntry.displayName or displayName
             else
                 warn(string.format("[BannerManager] Catalog entry missing for unit %s, using fallback icon.", id))
             end
-            print(string.format("[BannerManager] Banner entry: id=%s, rarity=%d, icon_id=%s", id, stars, icon_id))
-            table.insert(entries, { id = id, rarity = stars, icon_id = icon_id })
+            print(string.format("[BannerManager] Banner entry: id=%s, rarity=%d, icon_id=%s, name=%s", id, stars, icon_id, displayName))
+            table.insert(entries, { id = id, rarity = stars, icon_id = icon_id, displayName = displayName })
         end
     end
     pushFrom(5, 1)

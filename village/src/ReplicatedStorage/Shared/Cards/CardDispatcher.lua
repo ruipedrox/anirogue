@@ -23,7 +23,14 @@ local _playerCards: { [Player]: { [string]: boolean } } = {}
 -- Obtém (e faz require se necessário) o ModuleScript da carta (campo def.module)
 function Dispatcher.GetModule(name: string)
     if type(name) ~= "string" or #name == 0 then return nil end
-    if _moduleCache[name] ~= nil then return _moduleCache[name] end
+    if _moduleCache[name] ~= nil then
+        local cached = _moduleCache[name]
+        if cached == false then
+            warn("[CardDispatcher] GetModule: '" .. name .. "' is cached as FAILED")
+        end
+        return cached or nil
+    end
+    print("[CardDispatcher] Requiring module:", name)
     local modScript = CardsFolder:FindFirstChild(name)
     if not modScript then
         warn("[CardDispatcher] Module not found:", name)
@@ -32,10 +39,11 @@ function Dispatcher.GetModule(name: string)
     end
     local ok, mod = pcall(require, modScript)
     if not ok then
-        warn("[CardDispatcher] Error requiring module", name, mod)
+        warn("[CardDispatcher] Error requiring module", name, tostring(mod))
         _moduleCache[name] = false
         return nil
     end
+    print("[CardDispatcher] Module loaded OK:", name, "| OnCardAdded:", type(mod and mod.OnCardAdded))
     _moduleCache[name] = mod
     return mod
 end

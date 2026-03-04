@@ -40,7 +40,7 @@ WaveConfig.SpawnAreas = {
 
 -- 15 waves - Soul Society Entrance difficulty
 WaveConfig.Waves = {
-    { enemies = { { id = "meele_Reaper", count = 3 } } }, -- Wave 1
+    { enemies = { { id = "Aizen", count = 1, position = Vector3.new(-26.95, 10.5, -0.174) } } }, -- Wave 1 TEST
     { enemies = { { id = "meele_Reaper", count = 4 } } }, -- Wave 2
     { enemies = { { id = "meele_Reaper", count = 5 }, { id = "ranged_Reaper", count = 1 } } }, -- Wave 3
     { enemies = { { id = "meele_Reaper", count = 6 }, { id = "ranged_Reaper", count = 2 } } }, -- Wave 4

@@ -3,7 +3,7 @@ local NarutoStats = {}
 -- Display metadata
 NarutoStats.name = "Fox Boy" -- renamed from Naruto for copyright-safe display
 NarutoStats.stars = 3
-NarutoStats.icon = 135505550864938
+NarutoStats.icon = 79851758907859
 -- Flag: whether this template supports evolution (UI reads from Stats)
 NarutoStats.can_evolve = true
 NarutoStats.Passives = {

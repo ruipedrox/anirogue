@@ -1,18 +1,17 @@
--- Garante que CurrentBanner existe logo no início
+-- Ensure `CurrentBanner` StringValue exists (single source of truth)
 local ReplicatedStorage = game:GetService("ReplicatedStorage")
 local bannerValue = ReplicatedStorage:FindFirstChild("CurrentBanner")
 if not bannerValue then
     bannerValue = Instance.new("StringValue")
     bannerValue.Name = "CurrentBanner"
     bannerValue.Parent = ReplicatedStorage
-    bannerValue.Value = "" -- Inicializa vazio
+    bannerValue.Value = "" -- initialize empty
 end
--- BannerManager.server.lua
+
+-- BannerManager.server.lua (delegates generation to BannerManager.module)
 local DataStoreService = game:GetService("DataStoreService")
-local ReplicatedStorage = game:GetService("ReplicatedStorage")
 local remotes = ReplicatedStorage:WaitForChild("Remotes")
 local BannerUpdated = remotes:FindFirstChild("BannerUpdated")
-local BannerDataStore = DataStoreService:GetDataStore("GlobalBanner")
 local HttpService = game:GetService("HttpService")
 
 -- Função para calcular o timestamp do próximo horário de troca (meia em meia hora)

@@ -27,6 +27,11 @@ local STATS do
 end
 
 local Damage = require(ReplicatedStorage:WaitForChild("Scripts"):WaitForChild("Combat"):WaitForChild("Damage"))
+local SFXHelper = require(ReplicatedStorage:WaitForChild("Scripts"):WaitForChild("SFXHelper"))
+local NORMAL_ATTACK_SFX_ID = 124209098662760
+local DASH_WINDUP_SFX_ID = 127758785414867
+local DASH_SFX_ID = 88520640334416
+local TELEPORT_CHARGE_END_SFX_ID = 118590720721540
 
 -- Extract stat values
 local MOVE_SPEED = (STATS and STATS.MoveSpeed) or 14
@@ -322,6 +327,7 @@ local function tryNormalAttack(targetRoot)
 	humanoid.WalkSpeed = 0
 	
 	-- Play attack animation
+	SFXHelper.playAt(root, NORMAL_ATTACK_SFX_ID, 0.7, { minDist = 10, maxDist = 70, lifetime = 2 })
 	local attackAnim = playAnim("Normal_attack", 0.1, 1.0, 1.0)
 	
 	-- Deal damage after 0.3s
@@ -379,6 +385,7 @@ local function tryDashSlash(now)
 	local direction = flatDirTo(targetRoot.Position)
 	
 	-- Telegraph windup (Dash_begin animation)
+	SFXHelper.playAt(root, DASH_WINDUP_SFX_ID, 0.8, { minDist = 10, maxDist = 80, lifetime = 3 })
 	local windup = playAnim("Dash_begin", 0.1, 1.0, 1.0)
 	local releaseWindupPose = holdLastKeyframePose(windup)
 	setFrozen(true)
@@ -466,6 +473,7 @@ local function tryDashSlash(now)
 	end
 	
 	-- Execute dash with Dash animation
+	SFXHelper.playAt(root, DASH_SFX_ID, 0.8, { minDist = 10, maxDist = 80, lifetime = 2 })
 	local dashAnim = playAnim("Dash", 0.05, 1.0, 1.2)
 	local dashSpeed = 120
 	local dashDuration = dashDist / dashSpeed
@@ -553,6 +561,7 @@ local function tryTeleportStrike(now)
 	
 	-- Charge duration
 	pauseAwareWait(TELEPORT_CHARGE)
+	SFXHelper.playAt(root, TELEPORT_CHARGE_END_SFX_ID, 0.8, { minDist = 10, maxDist = 80, lifetime = 3 })
 	
 	if not running or isPaused() then
 		if telegraph and telegraph.Parent then telegraph:Destroy() end
@@ -580,6 +589,7 @@ local function tryTeleportStrike(now)
 	-- Massive damage on arrival
 	task.delay(0.1, function()
 		if running then
+			SFXHelper.playAt(root, NORMAL_ATTACK_SFX_ID, 0.8, { minDist = 10, maxDist = 80, lifetime = 2 })
 			areaDamage(root.Position, TELEPORT_AOE_RADIUS, TELEPORT_DAMAGE)
 		end
 	end)

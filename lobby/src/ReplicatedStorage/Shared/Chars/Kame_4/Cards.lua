@@ -15,7 +15,7 @@ KameCards.Definitions = {
             -- Each level raises player.Stats.xpgainrate by +10% (handled by module)
             module = "IncreaseMaxLevel",
             -- Single image for all levels (pedido: sem imagens por nível)
-            image = "rbxassetid://00000000000000", -- TODO: substituir pelo asset real
+			image = "rbxassetid://91787940627332", -- TODO: substituir pelo asset real
             -- Mantemos levelTracker caso o UI use para mostrar progresso numérico, mas sem trocar imagem.
             levelTracker = {
                 folder = "KameMastery",

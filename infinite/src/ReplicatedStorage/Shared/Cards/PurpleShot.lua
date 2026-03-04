@@ -561,8 +561,7 @@ function def.OnUnequip(player)
 end
 
 function def.OnCardAdded(player, defTable, level)
-	def.OnEquip(player, level or 1)
-end
+      def.OnEquip(player, level or 1, defTable and tonumber(defTable.maxLevel))
 
 function def.Apply(player, defTable)
 	def.OnEquip(player, 1)

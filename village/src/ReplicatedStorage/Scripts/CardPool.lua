@@ -50,16 +50,30 @@ function CardPool:GetCardsForPlayer(player)
                                 -- New design: skip character stat cards (migrate stats to equipment offers)
                                 local isStatCard = (typeof(def.base) == "number") -- rarityMultiplier deprecated
                                 
-                                -- Skip cards that require unlock
+                                -- Skip cards that require unlock (generic handling)
                                 local requiresUnlock = def.requiresUnlock
                                 local canAdd = true
                                 if requiresUnlock then
-                                    -- Check if player has unlocked this card (e.g., Saitama's Serious Punch)
-                                    if def.id == "Saitama_Legendary_Punch" then
-                                        canAdd = player:GetAttribute("SaitamaAwakened") == true
+                                    -- Use a card-provided attribute/key to check unlock state. Module definitions
+                                    -- can provide `unlockAttribute` (string) and optional `unlockMinValue` (number)
+                                    local unlockAttr = (type(def) == "table" and def.unlockAttribute) or nil
+                                    local unlockMin = (type(def) == "table" and def.unlockMinValue)
+                                    if type(unlockAttr) == "string" and unlockAttr ~= "" then
+                                        local val = player:GetAttribute(unlockAttr)
+                                        if type(unlockMin) == "number" then
+                                            canAdd = (type(val) == "number" and val >= unlockMin)
+                                        else
+                                            canAdd = (val == true)
+                                        end
+                                    else
+                                        -- No unlockAttribute provided; default to denying unless unlocked via RunTrack/ChosenCards
+                                        local rt = player and player:FindFirstChild("RunTrack")
+                                        local chosenIds = rt and rt:FindFirstChild("ChosenCards")
+                                        local chosenTag = chosenIds and chosenIds:FindFirstChild(def.id)
+                                        canAdd = chosenTag and chosenTag:IsA("BoolValue") and chosenTag.Value == true
                                     end
                                 end
-                                
+
                                 if not isStatCard and canAdd then
                                     table.insert(cards, {
                                         id = def.id,
@@ -250,6 +264,32 @@ function CardPool:OfferByRarity(player, count, weights)
     -- RasenShuriken will now be levelable; we no longer gate it as unique-per-run
     for _, c in ipairs(all) do
         local include = true
+        -- Exclude cards explicitly disabled for this run (e.g., replaced by another card)
+        local disabledFolder = runTrack and runTrack:FindFirstChild("DisabledCards")
+        if disabledFolder then
+            local disabledTag = disabledFolder:FindFirstChild(c.id)
+            if disabledTag and disabledTag:IsA("BoolValue") and disabledTag.Value == true then
+                include = false
+            end
+        end
+        -- Generic: if the card defines a maxLevel/MaxLevel and the player already has that level, don't offer it
+        do
+            local defCheck = c and c._def
+            if include and type(defCheck) == "table" then
+                local declaredMax = nil
+                if typeof(defCheck.maxLevel) == "number" then declaredMax = defCheck.maxLevel end
+                if not declaredMax and typeof(defCheck.MaxLevel) == "number" then declaredMax = defCheck.MaxLevel end
+                if declaredMax then
+                    local rt = player and player:FindFirstChild("RunTrack")
+                    local folder = rt and rt:FindFirstChild(c.id)
+                    local lvlNV = folder and folder:FindFirstChild("Level")
+                    local current = (lvlNV and lvlNV:IsA("IntValue") and lvlNV.Value) or 0
+                    if current >= declaredMax then
+                        include = false
+                    end
+                end
+            end
+        end
         -- Legendary constraints
         -- Legendary gating removed; keep other per-card rules below
         -- Goku SuperWarrior constraint: hide if already at max level
@@ -329,6 +369,42 @@ function CardPool:OfferByRarity(player, count, weights)
                 -- Legendary rarity is cosmetic now; allow stacking legendaries like Kamehameha
                 if isSpecialUnique or (type(def) == "table" and def.unique == true) then
                     include = false
+                end
+            end
+        end
+        -- Check Required/required card prerequisites (support both naming styles)
+        if include then
+            local def = c._def
+            local reqList = nil
+            if type(def) == "table" then
+                reqList = def.RequiredCards or def.requiredCards
+            end
+            if reqList and type(reqList) == "table" then
+                for _, req in ipairs(reqList) do
+                    local reqId = req.cardId or req.id or req.cardID
+                    local minLevel = req.minLevel or req.min or 1
+                    local okReq = false
+                    -- Check runTrack level folder (RunTrack/<reqId>/Level)
+                    local rt = player and player:FindFirstChild("RunTrack")
+                    if rt and reqId then
+                        local reqFolder = rt:FindFirstChild(reqId)
+                        local lvlNV = reqFolder and reqFolder:FindFirstChild("Level")
+                        if lvlNV and lvlNV:IsA("IntValue") and lvlNV.Value >= minLevel then
+                            okReq = true
+                        end
+                        -- Also allow chosen uniques (ChosenCards/<reqId>) only when minLevel <= 1
+                        local chosenIds = rt and rt:FindFirstChild("ChosenCards")
+                        local chosenTag = chosenIds and chosenIds:FindFirstChild(reqId)
+                        if chosenTag and chosenTag:IsA("BoolValue") and chosenTag.Value == true then
+                            if (minLevel or 1) <= 1 then
+                                okReq = true
+                            end
+                        end
+                    end
+                    if not okReq then
+                        include = false
+                        break
+                    end
                 end
             end
         end

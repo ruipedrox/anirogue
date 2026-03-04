@@ -8,20 +8,32 @@ M.PlaceId = 0 -- replace with the actual gameplay place id for Green Planet
 M.PreviewImage = "rbxassetid://92510023198914"
 M.BackgroundImage = "rbxassetid://92510023198914"
 M.Levels = {
-    { Level = 1, BossImage = "rbxassetid://0", WaveKey = "green_planet_l1" },
-    { Level = 2, BossImage = "rbxassetid://0", WaveKey = "green_planet_l2" },
-    { Level = 3, BossImage = "rbxassetid://0", WaveKey = "green_planet_l3" },
+	-- Infinite-mode WaveKey: use a map-specific key so Infinite runner resolves the correct config
+	{ Level = 1, BossImage = "rbxassetid://0", WaveKey = "pirate_island_l1" },
 }
 
--- Drop/Reward information for Village
--- First clear of any level: 100 Gems and 1000 Gold
--- Repeat clears (any level): 20 Gems and 200 Gold
--- Every run: guaranteed 2x Headband items
 M.Drops = {
-	FirstClear = { Gems = 100, Gold = 2000, PerLevel = true },
-	Repeat = { Gems = 20, Gold = 500 },
-	GuaranteedItemsPerRun = {
-		{ Id = "xp_core", Quantity = 2 },
+	-- First clear rewards (apply per-level when PerLevel=true)
+	-- Infinite-mode milestone rewards: granted every 10 waves by server logic.
+	-- This section documents the possible milestone rewards and is used by UIs to display expectations.
+	Milestone = {
+		Every = 10, -- rewards awarded on waves 10,20,30,...
+		-- Base reward formula (server uses tier = wave/10):
+		-- Gold = 50 + (tier * 30), Gems = 2 + floor(tier * 0.5)
+		BaseGold = 50,
+		GoldPerTier = 30,
+		BaseGems = 5,
+		GemsPerTierFraction = 0.5,
+		-- Character XP roll: represent as separate entries so UI can show distinct icons
+		CharacterXP = {
+			{ Id = "xp3", Chance = 0.7 },
+			{ Id = "xp4", Chance = 0.3 },
+		},
+		-- Independent evolve item drops (server constants)
+		EvolveShard = { Chance = 0.40, Min = 2, Max = 4 },
+		EvolveCore = { Chance = 0.40, Min = 1, Max = 2 },
 	},
+	-- No FirstClear/Repeat or guaranteed headband for Infinite maps
+	GuaranteedItemsPerRun = {},
 }
 return M

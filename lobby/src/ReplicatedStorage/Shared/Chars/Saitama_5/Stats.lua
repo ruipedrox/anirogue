@@ -3,7 +3,7 @@ local SaitamaStats = {}
 -- Display metadata
 SaitamaStats.name = "Bald Hero" -- Saitama, 5-star
 SaitamaStats.stars = 5
-SaitamaStats.icon = 0 -- Substitui com o ID do ícone quando tiveres
+SaitamaStats.icon = 99557430753049 -- Substitui com o ID do ícone quando tiveres
 SaitamaStats.can_evolve = false
 -- NOTA: Stats base baixos porque a carta "Serious Training" dá scaling massivo durante a run
 SaitamaStats.Passives = {

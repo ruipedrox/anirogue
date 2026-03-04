@@ -26,6 +26,9 @@ local STATS do
 end
 
 local Damage = require(ReplicatedStorage:WaitForChild("Scripts"):WaitForChild("Combat"):WaitForChild("Damage"))
+local SFXHelper = require(ReplicatedStorage:WaitForChild("Scripts"):WaitForChild("SFXHelper"))
+
+local CHIDORI_SFX_ID = 109153106197599
 
 -- Extract stat values with defaults
 local BASE_DAMAGE = (STATS and STATS.Damage) or 65
@@ -345,7 +348,29 @@ local function tryChidoriDash(now)
 	setFrozen(true)  -- IGUAL AO ZABUZA
 	local corridorWidth = math.max(4, CHIDORI_PATH_RADIUS * 2)
 	local lineTele = createLineTelegraph(root.Position, direction, constantRange, corridorWidth, CHIDORI_TELEGRAPH + 10, Color3.fromRGB(255,70,70))
-	
+	SFXHelper.playAt(root, CHIDORI_SFX_ID, 0.85, { minDist = 15, maxDist = 85, lifetime = 3.0 })
+
+	-- Spawnar modelo chidori na mão direita
+	local chidoriClone = nil
+	local rightArm = enemyModel:FindFirstChild("Right Arm")
+	local rightGrip = rightArm and rightArm:FindFirstChild("RightGripAttachment")
+	local chidoriTemplate = ReplicatedStorage:WaitForChild("Enemys"):WaitForChild("Atacks"):FindFirstChild("chidori")
+	if chidoriTemplate and rightArm and rightGrip then
+		chidoriClone = chidoriTemplate:Clone()
+		chidoriClone.Parent = rightArm
+		local primaryPart = chidoriClone.PrimaryPart or chidoriClone:FindFirstChildWhichIsA("BasePart")
+		if primaryPart then
+			for _, p in ipairs(chidoriClone:GetDescendants()) do
+				if p:IsA("BasePart") then p.Anchored = false p.CanCollide = false end
+			end
+			chidoriClone:PivotTo(rightGrip.WorldCFrame)
+			local weld = Instance.new("WeldConstraint")
+			weld.Part0 = primaryPart
+			weld.Part1 = rightArm
+			weld.Parent = primaryPart
+		end
+	end
+
 	-- Ativar lightning particles progressivamente
 	local totalEffects = #lightningParticles + #lightningLights
 	if totalEffects > 0 then
@@ -412,6 +437,7 @@ local function tryChidoriDash(now)
 		releaseWindupPose()
 		for _, particle in ipairs(lightningParticles) do particle.Enabled = false end
 		for _, light in ipairs(lightningLights) do light.Enabled = false end
+		if chidoriClone then chidoriClone:Destroy() chidoriClone = nil end
 		return 
 	end
 
@@ -567,6 +593,7 @@ local function tryChidoriDash(now)
 	end)
 	
 	if lineTele and lineTele.Parent then lineTele:Destroy() end
+	if chidoriClone then chidoriClone:Destroy() chidoriClone = nil end
 	humanoid.AutoRotate = true
 	popActionLock()
 	
@@ -610,6 +637,7 @@ local function tryWingAttack(now)
 	pushActionLock()
 	
 	local wingAnim = playAnim("wing_attack", 0.1, 1.0, 1.0)
+	SFXHelper.playAt(root, 119001781598559, 0.8, { minDist = 10, maxDist = 70, lifetime = 2.0 })
 	
 	-- Conectar ao evento Hit da animação
 	local hitConnection
@@ -686,6 +714,7 @@ local function tryWingAttack(now)
 	
 	-- Marcar cooldown
 	lastWing = now
+	SFXHelper.playAt(root, 108175404911538, 0.85, { minDist = 10, maxDist = 70, lifetime = 2.0 })
 	
 	-- Aguardar animação terminar completamente
 	local animLength = (wingAnim and wingAnim.Length) or 1.5
@@ -725,6 +754,7 @@ local function tryFireBallAttack(now)
 	
 	-- Play Fly animation (deixar animação controlar altura)
 	local flyAnim = playAnim("Fly", 0.2, 1.0, 1.0)
+	SFXHelper.playAt(root, 105793513481725, 0.8, { minDist = 10, maxDist = 80, lifetime = 2.0 })
 	if not flyAnim then
 		popActionLock()
 		return
@@ -801,6 +831,7 @@ local function tryFireBallAttack(now)
 			launchConnection = fireballAnim:GetMarkerReachedSignal("Launch"):Connect(function()
 				print("[Sasuke] ===== Launch marker triggered! =====")
 				markerFired = true
+				SFXHelper.playAt(root, 76959672337032, 0.85, { minDist = 10, maxDist = 90, lifetime = 2.5 })
 				
 				-- Snapshot da posição do player
 				local targetPlayer = select(1, getNearestPlayer(500))

@@ -4,6 +4,10 @@
 
 local ReplicatedStorage = game:GetService("ReplicatedStorage")
 
+local ScriptsFolder = ReplicatedStorage:WaitForChild("Scripts")
+local SFXHelper = require(ScriptsFolder:WaitForChild("SFXHelper"))
+local SUPERWARRIOR_SFX_ID = 128025610594825
+
 local M = {}
 
 -- Internal helpers reused from other card modules
@@ -168,6 +172,13 @@ function M.Apply(player: Player, def)
 
 	-- Equip aura for this level
 	M.EquipAuraForLevel(player, current)
+
+	-- SFX ao escolher a carta
+	local char = player.Character
+	local hrp = char and char:FindFirstChild("HumanoidRootPart")
+	if hrp then
+		SFXHelper.playAt(hrp, SUPERWARRIOR_SFX_ID, 0.9, { minDist = 15, maxDist = 80, lifetime = 5 })
+	end
 
 	-- Reapply full stats so Humanoid.MaxHealth/WalkSpeed reflect upgrades consistently
 	pcall(function()

@@ -876,6 +876,15 @@ pcall(function()
 					local f = screenGui:FindFirstChild("Feed_frame") or (frame and frame:FindFirstChild("Feed_frame", true))
 					if f and f:IsA("GuiObject") then f.Visible = false end
 				end)
+				-- Clear main id and attributes to avoid stale state reopening the feed UI
+				feedMainId = nil
+				pcall(function()
+					if screenGui and screenGui.SetAttribute then
+						screenGui:SetAttribute("FeedMain", nil)
+						screenGui:SetAttribute("Show", false)
+						screenGui:SetAttribute("Hide", true)
+					end
+				end)
 			else
 				warn("[Feed] server rejected feed request ->", tostring(result.Message))
 			end
@@ -948,6 +957,15 @@ pcall(function()
 					if frame and frame:IsA("GuiObject") then frame.Visible = false end
 					local f = screenGui:FindFirstChild("Feed_frame") or (frame and frame:FindFirstChild("Feed_frame", true))
 					if f and f:IsA("GuiObject") then f.Visible = false end
+				end)
+				-- Clear main id and attributes to avoid stale state reopening the feed UI
+				feedMainId = nil
+				pcall(function()
+					if screenGui and screenGui.SetAttribute then
+						screenGui:SetAttribute("FeedMain", nil)
+						screenGui:SetAttribute("Show", false)
+						screenGui:SetAttribute("Hide", true)
+					end
 				end)
 		end)
 	else

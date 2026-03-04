@@ -3,7 +3,7 @@ local XP3Stats = {}
 -- XP Monster Tier 3 - evolução básica
 XP3Stats.name = "XP Slime"
 XP3Stats.stars = 1
-XP3Stats.icon = 79229534708781 -- Usando mesmo icon do evolve_shard temporariamente
+XP3Stats.icon = 122812729588216 -- Usando mesmo icon do evolve_shard temporariamente
 
 -- Stats muito baixos - usado apenas para evolução
 XP3Stats.Passives = {

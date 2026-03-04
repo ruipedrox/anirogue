@@ -1,5 +1,5 @@
 return {
-	Health = 3600,
+	Health = 360000,
 	MoveSpeed = 12,
 	Damage = 48,
 	XPDrop = 340,

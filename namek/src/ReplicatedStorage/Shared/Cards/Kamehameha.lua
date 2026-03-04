@@ -9,6 +9,9 @@ local TweenService = game:GetService("TweenService")
 
 local ScriptsFolder = ReplicatedStorage:WaitForChild("Scripts")
 local Damage = require(ScriptsFolder:WaitForChild("Combat"):WaitForChild("Damage"))
+local SFXHelper = require(ScriptsFolder:WaitForChild("SFXHelper"))
+
+local KAMEHAMEHA_SFX_ID = 134575329727831
 
 local M = {}
 
@@ -17,7 +20,7 @@ local running: { [Player]: RBXScriptConnection } = {}
 -- Orientation offsets (adjust if your models are built along Y-axis)
 local ROTATE_X = math.rad(90) -- rotate 90 degrees around X to lay beam horizontally
 local FORWARD_OFFSET_CHARGE = -2
-local FORWARD_OFFSET_BEAM = -6
+local FORWARD_OFFSET_BEAM = 4
 
 local function getStats(player: Player)
 	local stats = player:FindFirstChild("Stats")
@@ -116,6 +119,8 @@ end
 -- Compute the extent (comprimento) do feixe na direção que o player olha (LookVector)
 local function computeForwardExtent(inst: Instance, look: Vector3)
 	local function orientedExtent(cf: CFrame, size: Vector3)
+		-- safety: if size missing, return 0
+		if not size then return 0 end
 		-- projeção de um OBB na direção look
 		local xAxis, yAxis, zAxis = cf.RightVector, cf.UpVector, cf.LookVector
 		return math.abs(size.X * xAxis:Dot(look)) + math.abs(size.Y * yAxis:Dot(look)) + math.abs(size.Z * zAxis:Dot(look))
@@ -124,7 +129,9 @@ local function computeForwardExtent(inst: Instance, look: Vector3)
 		local bboxCF, bboxSize = inst:GetBoundingBox()
 		return orientedExtent(bboxCF, bboxSize)
 	elseif inst:IsA("BasePart") then
-		return orientedExtent(inst.CFrame, inst.Size)
+		local size = inst.Size
+		if not size then return 0 end
+		return orientedExtent(inst.CFrame, size)
 	end
 	return 0
 end
@@ -214,8 +221,8 @@ function M.Start(player: Player)
 		local onInterval = upgrades and upgrades:FindFirstChild("OnInterval") or ensureFolder(ensureFolder(player, "Upgrades"), "OnInterval")
 		local cfg = onInterval:FindFirstChild("Kamehameha") or ensureFolder(onInterval, "Kamehameha")
 		local cooldownNV = ensureNumber(cfg, "Cooldown", 10)
-		local chargeNV = ensureNumber(cfg, "ChargeTime", 2)
-		local durationNV = ensureNumber(cfg, "BeamDuration", 3)
+		local chargeNV = ensureNumber(cfg, "ChargeTime", 3)
+		local durationNV = ensureNumber(cfg, "BeamDuration", 4)
 		local tickNV = ensureNumber(cfg, "TickInterval", 0.5)
 		local dmgPctNV = ensureNumber(cfg, "DamagePercent", 50)
 		local sizeScaleNV = ensureNumber(cfg, "SizeScale", 1)
@@ -277,27 +284,28 @@ function M.Start(player: Player)
 		pcall(function() charge:Destroy() end)
 
 		-- Fire beam
+		SFXHelper.playAt(hrp, KAMEHAMEHA_SFX_ID, 0.9, { minDist = 15, maxDist = 120, lifetime = durationNV.Value + 1 })
 		local beam = beamTemplate:Clone()
 		beam.Name = "Kamehameha_Instance"
 		beam.Parent = character
 		-- Make non-colliding, anchored
 		makeNonBlockingAnchored(beam)
-		-- Find nearest enemy and calculate aim direction
+		-- Find nearest enemy and calculate aim target (we track targetModel so we can retarget if it dies)
 		local nearestEnemy = findNearestEnemy(hrp.Position)
-		local aimDirection: Vector3
-		if nearestEnemy then
-			local enemyHrp = nearestEnemy:FindFirstChild("HumanoidRootPart") or nearestEnemy.PrimaryPart
-			if enemyHrp then
-				aimDirection = (enemyHrp.Position - hrp.Position).Unit
-			else
-				aimDirection = hrp.CFrame.LookVector
+		local targetModel = nearestEnemy
+		local function getAimCFrame()
+			if targetModel and targetModel.Parent then
+				local enemyHrp = targetModel:FindFirstChild("HumanoidRootPart") or targetModel.PrimaryPart
+				local hum = targetModel:FindFirstChildOfClass("Humanoid")
+				if enemyHrp and hum and hum.Health > 0 then
+					return CFrame.lookAt(hrp.Position, enemyHrp.Position)
+				end
 			end
-		else
-			aimDirection = hrp.CFrame.LookVector
+			return CFrame.lookAt(hrp.Position, hrp.Position + hrp.CFrame.LookVector)
 		end
 		-- Coloca inicialmente para poder medir bounding box já orientado
 		positionInFront(beam, hrp, FORWARD_OFFSET_BEAM)
-		local look = aimDirection
+		local look = getAimCFrame().LookVector
 		-- Medir tamanho base (scale 1) uma única vez e armazenar no template
 		local baseForwardSize: number = beamTemplate:GetAttribute("BaseForwardSize")
 		local backFaceDist: number = beamTemplate:GetAttribute("BackFaceDistance")
@@ -333,34 +341,57 @@ function M.Start(player: Player)
 		local currentForwardSize = computeForwardExtent(beam, look)
 		-- Queremos manter a face traseira sempre à mesma distância do player (backFaceDist)
 		-- Novo offset para colocar o pivot mais à frente = backFaceDist + currentForwardSize/2
-		local desiredForwardDistance = backFaceDist + currentForwardSize / 2 -- distância positiva em studs para frente do HRP até o pivot
-		local dynamicForwardOffset = -desiredForwardDistance -- negativo porque usamos CFrame.new(0,0,negativo)
+			local desiredForwardDistance = backFaceDist + currentForwardSize / 2
+			local dynamicForwardOffset = -desiredForwardDistance -- negative because we use CFrame.new(0,0,negative) to move forward
 		-- Position beam: rotate around player HRP to aim at target
-		local aimCFrame = CFrame.lookAt(hrp.Position, hrp.Position + aimDirection)
+		local aimCFrame = getAimCFrame()
+		local flipModel = false
 		if beam:IsA("Model") then
-			local primary = beam.PrimaryPart or beam:FindFirstChild("HumanoidRootPart")
-			if primary then
-				primary.CFrame = aimCFrame * CFrame.new(0, 0, dynamicForwardOffset) * CFrame.Angles(ROTATE_X, 0, 0)
-			end
+			-- Move entire model to the desired pivot instead of only moving a part
+			pcall(function()
+				beam:PivotTo(aimCFrame * CFrame.new(0, 0, dynamicForwardOffset) * CFrame.Angles(ROTATE_X, 0, 0))
+			end)
+			-- Detect if the model's forward is opposite the intended aim and rotate the model 180deg yaw if so
+			pcall(function()
+				local primary = beam.PrimaryPart or beam:FindFirstChildWhichIsA("BasePart")
+				if primary then
+					local beamLook = primary.CFrame.LookVector
+					local intendedLook = aimCFrame.LookVector
+					if beamLook:Dot(intendedLook) < 0 then
+						flipModel = true
+						-- Pivot using a yaw of 180 degrees so the model faces the intended direction
+						beam:PivotTo(aimCFrame * CFrame.Angles(0, math.pi, 0) * CFrame.new(0, 0, dynamicForwardOffset) * CFrame.Angles(ROTATE_X, 0, 0))
+					end
+				end
+			end)
 		elseif beam:IsA("BasePart") then
 			beam.CFrame = aimCFrame * CFrame.new(0, 0, dynamicForwardOffset) * CFrame.Angles(ROTATE_X, 0, 0)
 		end
 		-- Update follow connection to use aim direction
+		local currentAimDir = getAimCFrame().LookVector
+		if flipModel then currentAimDir = -currentAimDir end
+		local LERP_SPEED = 8
 		local beamFollowConn
-		beamFollowConn = RunService.Heartbeat:Connect(function()
+			beamFollowConn = RunService.Heartbeat:Connect(function(dt)
 			if not beam.Parent or not hrp.Parent then
 				if beamFollowConn then beamFollowConn:Disconnect() end
 				return
 			end
-			local currentAimCFrame = CFrame.lookAt(hrp.Position, hrp.Position + aimDirection)
-			if beam:IsA("Model") then
-				local primary = beam.PrimaryPart or beam:FindFirstChild("HumanoidRootPart")
-				if primary then
-					primary.CFrame = currentAimCFrame * CFrame.new(0, 0, dynamicForwardOffset) * CFrame.Angles(ROTATE_X, 0, 0)
-				end
-			elseif beam:IsA("BasePart") then
-				beam.CFrame = currentAimCFrame * CFrame.new(0, 0, dynamicForwardOffset) * CFrame.Angles(ROTATE_X, 0, 0)
+			-- If our target died/removed, find a new nearest enemy
+			if not (targetModel and targetModel.Parent and targetModel:FindFirstChildOfClass("Humanoid") and targetModel:FindFirstChildOfClass("Humanoid").Health > 0) then
+				targetModel = findNearestEnemy(hrp.Position)
 			end
+				local desiredDir = getAimCFrame().LookVector
+				currentAimDir = currentAimDir:Lerp(desiredDir, math.clamp(LERP_SPEED * dt, 0, 1))
+				local currentAimCFrame = CFrame.lookAt(hrp.Position, hrp.Position + currentAimDir)
+				if flipModel then currentAimCFrame = currentAimCFrame * CFrame.Angles(0, math.pi, 0) end
+				if beam:IsA("Model") then
+					pcall(function()
+						beam:PivotTo(currentAimCFrame * CFrame.new(0, 0, dynamicForwardOffset) * CFrame.Angles(ROTATE_X, 0, 0))
+					end)
+				elseif beam:IsA("BasePart") then
+					beam.CFrame = currentAimCFrame * CFrame.new(0, 0, dynamicForwardOffset) * CFrame.Angles(ROTATE_X, 0, 0)
+				end
 		end)
 
 		-- Damage ticks during duration
@@ -446,8 +477,8 @@ function M.Apply(player: Player, def)
 	local sizePerLevel = typeof(def.sizePerLevel) == "number" and def.sizePerLevel or 0.25
 	-- Extra bonus applied only at the final level (último nível)
 	local finalLevelExtra = typeof(def.finalLevelExtra) == "number" and def.finalLevelExtra or 0.25
-	local duration = typeof(def.duration) == "number" and def.duration or 3
-	local chargeTime = typeof(def.chargeTime) == "number" and def.chargeTime or 2
+	local duration = typeof(def.duration) == "number" and def.duration or 4
+	local chargeTime = typeof(def.chargeTime) == "number" and def.chargeTime or 3
 	local tickInterval = typeof(def.tickInterval) == "number" and def.tickInterval or 0.5
 
 	local effectiveCooldown = baseCooldown + cdPerLevel * (L - 1)

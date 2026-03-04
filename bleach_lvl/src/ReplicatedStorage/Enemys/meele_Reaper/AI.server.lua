@@ -5,6 +5,10 @@ local Players = game:GetService("Players")
 local ReplicatedStorage = game:GetService("ReplicatedStorage")
 local CollectionService = game:GetService("CollectionService")
 
+local ScriptsFolder = ReplicatedStorage:WaitForChild("Scripts")
+local SFXHelper = require(ScriptsFolder:WaitForChild("SFXHelper"))
+local MELEE_SFX_ID = 136833367092810
+
 local RANGE = 3 -- increased to expand enemy engagement range
 local COOLDOWN = 0.5
 local DEFAULT_DAMAGE = 10
@@ -270,7 +274,8 @@ task.spawn(function()
 						lastHitTimes[plr] = now					-- Play attack animation
 					if attackTrack and not attackTrack.IsPlaying then
 						attackTrack:Play()
-					end						phum:TakeDamage(dmg)
+					end						SFXHelper.playAt(root, MELEE_SFX_ID, 0.7, { minDist = 10, maxDist = 60, lifetime = 2 })
+							phum:TakeDamage(dmg)
 						-- Apply invulnerability frames
 						local invs = getInvTimeSeconds(plr)
 						if invs > 0 then

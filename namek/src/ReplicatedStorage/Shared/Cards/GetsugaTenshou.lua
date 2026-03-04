@@ -6,7 +6,12 @@ local ReplicatedStorage = game:GetService("ReplicatedStorage")
 local RunService = game:GetService("RunService")
 local CollectionService = game:GetService("CollectionService")
 
-local Projectile = require(ReplicatedStorage:WaitForChild("Scripts"):WaitForChild("Projectile"))
+local ScriptsFolder = ReplicatedStorage:WaitForChild("Scripts")
+local Projectile = require(ScriptsFolder:WaitForChild("Projectile"))
+local Damage = require(ScriptsFolder:WaitForChild("Combat"):WaitForChild("Damage"))
+local SFXHelper = require(ScriptsFolder:WaitForChild("SFXHelper"))
+
+local GETSUGA_SFX_ID = 108647485865798
 
 local def = {
 	Name = "Getsuga Tenshou",
@@ -119,7 +124,10 @@ local function fireGetsuga(player, level)
 	if not char then return end
 	local hrp = char:FindFirstChild("HumanoidRootPart")
 	if not hrp then return end
-	
+
+	-- SFX ao disparar
+	SFXHelper.playAt(hrp, GETSUGA_SFX_ID, 0.9, { minDist = 15, maxDist = 80, lifetime = 4 })
+
 	-- Get base damage from player stats
 	local playerStats = player:FindFirstChild("Stats")
 	local baseDamage = 10
@@ -149,25 +157,15 @@ local function fireGetsuga(player, level)
 		direction = Vector3.new(math.cos(randomAngle), 0, math.sin(randomAngle))
 	end
 	
-	-- Calculate directions based on projectile count and level logic
+	-- Calculate directions: evenly space N projectiles around full circle (360/N degrees)
 	local directions = {}
-	
-	if stats.projectileCount == 1 then
-		-- Level 1-2: Single projectile aimed at enemy
-		table.insert(directions, direction)
-	elseif stats.projectileCount == 2 then
-		-- Level 3-4: Two projectiles - one at enemy, one opposite (180°)
-		table.insert(directions, direction)
-		table.insert(directions, -direction) -- Opposite direction
-	elseif stats.projectileCount == 3 then
-		-- Level 5: Three projectiles separated by 120° (360/3), one aimed at enemy
-		table.insert(directions, direction)
-		-- Rotate by 120° and 240° from base direction
-		local baseCF = CFrame.new(Vector3.zero, direction)
-		local dir2 = (baseCF * CFrame.Angles(0, math.rad(120), 0)).LookVector
-		local dir3 = (baseCF * CFrame.Angles(0, math.rad(240), 0)).LookVector
-		table.insert(directions, dir2)
-		table.insert(directions, dir3)
+	local n = tonumber(stats.projectileCount) or 1
+	if n < 1 then n = 1 end
+	local baseCF = CFrame.new(Vector3.zero, direction)
+	for i = 0, n - 1 do
+		local angleDeg = (360 / n) * i
+		local dir = (baseCF * CFrame.Angles(0, math.rad(angleDeg), 0)).LookVector
+		table.insert(directions, dir)
 	end
 	
 	-- Fire projectiles with calculated directions
@@ -228,13 +226,24 @@ local function fireGetsuga(player, level)
 				speed = 40,
 				lifetime = 5,
 				pierce = math.huge, -- Infinite pierce
-				damage = projectileDamage,
+				damage = 0, -- use onHit to reliably apply damage to every enemy
 				owner = player,
 				ignore = { char },
 				model = projectileModel,
 				orientationOffset = CFrame.Angles(0, math.rad(-45), 0),
 				contactRadius = 1.5 * stats.size,
-				hitCooldownPerTarget = 0.5,
+				hitCooldownPerTarget = 0.2, -- small cooldown to avoid duplicate hits on same target
+				onHit = function(hitPart, enemyModel)
+					-- Defensive: ensure enemyModel and humanoid exist
+					if not enemyModel then return end
+					local hum = enemyModel:FindFirstChildOfClass("Humanoid")
+					if hum and hum.Health > 0 then
+						-- Apply damage directly so every pass-through deals damage
+						pcall(function()
+							Damage.Apply(hum, projectileDamage)
+						end)
+					end
+				end,
 			})
 		end)
 	end
@@ -281,7 +290,20 @@ local function startGetsugaLoop(player, level)
 end
 
 function def.OnCardAdded(player: Player, cardData, currentLevel: number)
-	local level = math.clamp(currentLevel or 1, 1, def.MaxLevel)
+	local maxLv = (type(cardData) == "table" and tonumber(cardData.maxLevel)) or def.MaxLevel
+	local level = math.clamp(currentLevel or 1, 1, maxLv)
+
+	-- Regista nível no RunTrack para que CardPool pare de oferecer ao atingir max level
+	do
+		local cardId = (type(cardData) == "table" and cardData.id) or "Ichigo_Legendary_Getsuga"
+		local runTrack = player:FindFirstChild("RunTrack")
+		if not runTrack then runTrack = Instance.new("Folder") runTrack.Name = "RunTrack" runTrack.Parent = player end
+		local myFolder = runTrack:FindFirstChild(cardId) or Instance.new("Folder")
+		myFolder.Name = cardId; myFolder.Parent = runTrack
+		local lvlNV = myFolder:FindFirstChild("Level") or Instance.new("IntValue")
+		lvlNV.Name = "Level"; lvlNV.Value = level; lvlNV.Parent = myFolder
+	end
+
 	local stats = statsPerLevel[level]
 	
 	if not stats then

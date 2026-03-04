@@ -28,7 +28,8 @@ local BANNER_BLACKLIST = {
     ["xp3"] = true,
     ["xp4"] = true,
     ["xp5"] = true,
-    ["Character_Template"] = true,
+    -- Template folders that must NEVER appear in banners (keys are lowercase)
+    ["character_template"] = true,
 }
 
 local function shallowCopy(src)

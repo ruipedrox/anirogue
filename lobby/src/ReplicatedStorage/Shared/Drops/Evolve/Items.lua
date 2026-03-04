@@ -67,7 +67,7 @@ do
     it.Id = "soul_sword"
     it.Category = "evolve"
     it.DisplayName = "Soul Sword"
-    it.Icon = "rbxassetid://0"
+	it.Icon = "rbxassetid://112479640247012"
     it.Rarity = "epico"
     it.Description = "A blade incarnation of the soul. Used to evolve characters with strong souls."
     it.Stackable = true

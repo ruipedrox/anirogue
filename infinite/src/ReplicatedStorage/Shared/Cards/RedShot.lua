@@ -388,8 +388,8 @@ local function fireRedShot(player, stats)
 	})
 end
 
-function def.OnEquip(player, level)
-	level = math.clamp(level or 1, 1, def.MaxLevel)
+function def.OnEquip(player, level, maxLevel)
+	level = math.clamp(level or 1, 1, maxLevel or def.MaxLevel)
 	local userId = player.UserId
 	
 	-- Clean up existing
@@ -461,7 +461,7 @@ end
 
 -- Compatibility for CardDispatcher: called when a card instance is added (levelable/stackable support)
 function def.OnCardAdded(player, defTable, level)
-    def.OnEquip(player, level or 1)
+    def.OnEquip(player, level or 1, defTable and tonumber(defTable.maxLevel))
 end
 
 return def

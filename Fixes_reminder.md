@@ -1,10 +1,23 @@
 BUGS POR CORRIGIR:
--nenhum para já
 -O único detalhe que falta é processar o RunResult.Infinite no lobby para atualizar o perfil. Queres que adicione isso agora ou testamos primeiro?
--verificar o getuga tenshou pq acho que só dá dano no primeiro inimigo
--butão do summon ui n funfa
+-butão do summon tp na ui n funfa
 
 NÂO ESQUECER:
+-mudado no infinite map:
+-autoattack
+-cards ui 
+-Electric.lua
+-DoT.lua
+-UISounds.client.lua
+-sfxhelper.lua
+-xp bar ui
+-AutoAttackSFX.client.lua
+-ApplySettings.client.lua
+-SettingsUI
+-lvl ui
+-script do cardpool
+-o script projectile
+
 -Verificar se o DOT está a funcionar corretamente
 -colocar as imagens de todos os personagens/bosses/mapas e cartas posso me esquecer antes de publicar
 -verificar as descriçoes de todas as cartas para ser mais intuitivo
@@ -12,7 +25,6 @@ NÂO ESQUECER:
 -verificar os drops de cada lvl, se está direito ou n
 
 FEATURES POR IMPLEMENTAR:
--evolutions(os items/ui e personagens estão feitos falta só o código da mecanica mesmo)
 -sound effects
 -criar dev products
 

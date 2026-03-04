@@ -2041,15 +2041,6 @@ buildAggregatedRunResult = function(plr)
 		end
 	end
 
-	-- 4) Add TotalDamage from RunTrack for missions tracking
-	local runTrack = plr:FindFirstChild("RunTrack")
-	if runTrack then
-		local dmgVal = runTrack:FindFirstChild("Damage")
-		if dmgVal and (dmgVal:IsA("NumberValue") or dmgVal:IsA("IntValue")) then
-			result.TotalDamage = tonumber(dmgVal.Value) or 0
-		end
-	end
-	
 	-- Normalize empty maps to nil (guard when CharacterXP is nil)
 	if type(result.CharacterXP) == "table" then
 		if next(result.CharacterXP) == nil then
@@ -2504,4 +2495,3 @@ end)
 -- Hook to Leveling: when levels are gained, offer cards (for now call manually on AddXP response)
 -- You can integrate this into Leveling:AddXP returns >0
 -- Example (already printed on level up): in OnEnemyDied, after gained>0, call offerCardsToPlayer(killer)
-

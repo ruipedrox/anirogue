@@ -25,6 +25,22 @@ print("[Codes] Remotes encontrado, procurando RedeemCode...")
 
 local RedeemCodeRE = Remotes:FindFirstChild("RedeemCode")
 local RedeemCodeResultRE = Remotes:FindFirstChild("RedeemCodeResult")
+
+-- SFX helper
+local _ss = game:GetService("SoundService")
+local _db = game:GetService("Debris")
+local function playCodeSFX(id)
+	if not id or id == 0 then return end
+	local sfxMult = math.clamp((player:GetAttribute("SFXVolume") or 50) / 100, 0, 1)
+	local s = Instance.new("Sound")
+	s.SoundId = "rbxassetid://" .. tostring(id)
+	s.Volume = 0.7 * sfxMult
+	s.Parent = _ss
+	s:Play()
+	_db:AddItem(s, 5)
+end
+local SFX_ACCEPT = 86070307558627
+local SFX_REJECT = 110870343804166
 local DebugResetCodesRE = Remotes:FindFirstChild("DebugResetCodes")
 
 if not RedeemCodeRE then
@@ -117,6 +133,7 @@ codeInput.FocusLost:Connect(function(enterPressed)
 
 	local code = codeInput.Text
 	if code == "" or #code < 3 then
+		playCodeSFX(SFX_REJECT)
 		statusLabel.Text = "Invalid Code"
 		statusLabel.TextColor3 = Color3.fromRGB(255, 100, 100)
 		task.delay(5, function()
@@ -152,6 +169,7 @@ if RedeemCodeResultRE then
 		codeInput.TextEditable = true
 
 		if success then
+			playCodeSFX(SFX_ACCEPT)
 			statusLabel.Text = message or "Code Redeemed!"
 			statusLabel.TextColor3 = Color3.fromRGB(100, 255, 100)
 			codeInput.Text = "" -- Limpa a TextBox
@@ -160,6 +178,7 @@ if RedeemCodeResultRE then
 				statusLabel.TextColor3 = defaultColor
 			end)
 		else
+			playCodeSFX(SFX_REJECT)
 			statusLabel.Text = message or "Invalid Code"
 			statusLabel.TextColor3 = Color3.fromRGB(255, 100, 100)
 			task.delay(5, function()

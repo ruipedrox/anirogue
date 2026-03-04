@@ -81,7 +81,7 @@ local ProfileTemplate = {
         },
     },
     Meta = {
-        Settings = { Language = "en" },
+        Settings = { Language = "en", MusicVolume = 50, SFXVolume = 50 },
     }
 }
 

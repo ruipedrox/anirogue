@@ -8,6 +8,10 @@ local RunService = game:GetService("RunService")
 
 local ScriptsFolder = ReplicatedStorage:WaitForChild("Scripts")
 local Projectile = require(ScriptsFolder:WaitForChild("Projectile"))
+
+local SFXHelper     = require(ScriptsFolder:WaitForChild("SFXHelper"))
+local ATTACK_SFX_ID = 137951817204948
+local CRIT_SFX_ID   = 139126905953135
 local OnHit = require(ScriptsFolder:WaitForChild("Combat"):WaitForChild("OnHit"))
 local Damage = require(ScriptsFolder:WaitForChild("Combat"):WaitForChild("Damage"))
 local Crit = require(ScriptsFolder:WaitForChild("Combat"):WaitForChild("Crit"))
@@ -283,88 +287,134 @@ local function startLoopForPlayer(player: Player)
             end
         end
 
-        -- Fire projectile now
-        Projectile.FireFromWeapon({
-            weaponStats = weaponStats,
-            origin = origin,
-            direction = dir,
-            owner = character,
-            damage = damage,
-            model = modelInstance,
-            orientationOffset = CFrame.Angles(0, math.rad(-90), 0),
-            hitCooldownPerTarget = 0.15,
-            onHit = function(hitPart, enemyModel)
-                local hum = enemyModel and enemyModel:FindFirstChildOfClass("Humanoid")
-                if not hum then return end
+        -- Fire projectile(s) now. Support multi-projectile count from Stats.ProjectileCount (e.g., Zoro Santoryu)
+        -- Determine projectile count: prefer explicit Stats.ProjectileCount if present, else use 1 + ProjectileBonus
+        local function readNumberVal(folder, name)
+            local nv = folder:FindFirstChild(name)
+            if nv and nv:IsA("NumberValue") then return nv.Value end
+            return nil
+        end
 
-                -- Tag creator for XP attribution
-                do
-                    local creator = hum:FindFirstChild("creator")
-                    if not creator then
-                        creator = Instance.new("ObjectValue")
-                        creator.Name = "creator"
-                        creator.Value = player
-                        creator.Parent = hum
-                        task.delay(2, function() if creator and creator.Parent then creator:Destroy() end end)
-                    end
-                end
+        local explicit = readNumberVal(statsFolder, "ProjectileCount")
+        local projectileCount
+        if explicit then
+            projectileCount = math.floor(explicit)
+        else
+            local bonus = math.floor((statsFolder:FindFirstChild("ProjectileBonus") and statsFolder:FindFirstChild("ProjectileBonus"):IsA("NumberValue") and statsFolder:FindFirstChild("ProjectileBonus").Value) or 0)
+            projectileCount = 1 + bonus
+        end
+        projectileCount = math.clamp(projectileCount, 1, 8)
 
-                -- Read needed stats
-                local function getNumber(name, default)
-                    local nv = statsFolder:FindFirstChild(name)
-                    if nv and nv:IsA("NumberValue") then return nv.Value end
-                    return default
-                end
+        -- Spread configuration (radians per step)
+        local spreadStep = math.rad(10) -- slightly wider spread
+        local totalSpread = spreadStep * (projectileCount - 1)
+        local startAngle = -totalSpread / 2
 
-                local baseDamage = getNumber("BaseDamage", 0)
-                local dmgPercent = getNumber("DamagePercent", 0)
-                local dmgMult = 1 + math.max(-0.99, (dmgPercent or 0) / 100)
-                local critChance = getNumber("CritChance", 0)
-                local critMult = getNumber("CritDamage", 1)
+        -- SFX 3D: tocar no HRP do jogador ao disparar
+        SFXHelper.playAt(root, ATTACK_SFX_ID, 0.7, { minDist = 10, maxDist = 60, lifetime = 2 })
 
-                -- Resolve crit and apply damage
-                local mult, critCount = Crit.Resolve(critChance, critMult)
-                local dealt = baseDamage * dmgMult * mult
-                
-                -- Apply damage with crit info for damage numbers
-                local finalDmg = Damage.Apply(hum, dealt, { critCount = critCount })
-                
-                -- Apply Electric chain lightning if player has electric stacks
-                local Electric = require(ScriptsFolder:WaitForChild("Combat"):WaitForChild("Electric"))
-                local electricStats = Electric.GetStats(player)
-                if electricStats and electricStats.chainCount > 0 and electricStats.damagePercent > 0 then
-                    Electric.Apply({
-                        player = player,
-                        originModel = enemy,
-                        damage = baseDamage, -- Use only base damage without multipliers
-                        chainCount = electricStats.chainCount,
-                        damagePercent = electricStats.damagePercent
-                    })
-                end
+        for i = 1, projectileCount do
+            local angle = startAngle + (i - 1) * spreadStep
+            -- Rotate the flat (Y) direction by angle around Y axis
+            local dirFrame = CFrame.new(Vector3.new(), dir)
+            local rotated = (CFrame.Angles(0, angle, 0) * dirFrame).LookVector
 
-                -- Apply DoT after base damage if enabled
-                local dotEnabled = false
-                do
-                    local bv = statsFolder:FindFirstChild("DoTEnabled")
-                    dotEnabled = bv and bv:IsA("BoolValue") and bv.Value or false
-                end
-                if dotEnabled then
-                    local totalTime = math.max(0.1, getNumber("DoTTime", 1))
-                    local eff = getNumber("DoTEffectiveness", 1)
-                    local dotCritFlag = false
+            -- Slight origin offset perpendicular to dir to avoid exact overlap
+            local right = dir:Cross(Vector3.new(0,1,0)).Unit
+            if right.Magnitude == 0 then right = Vector3.new(1,0,0) end
+            local offsetPer = 0.25 -- studs
+            local perpOffset = right * ((i - (projectileCount+1)/2) * offsetPer)
+            local spawnOrigin = origin + perpOffset
+
+            Projectile.FireFromWeapon({
+                weaponStats = weaponStats,
+                origin = spawnOrigin,
+                direction = rotated,
+                owner = character,
+                damage = damage,
+                model = modelInstance,
+                orientationOffset = CFrame.Angles(0, math.rad(-90), 0),
+                hitCooldownPerTarget = 0.15,
+                onHit = function(hitPart, enemyModel)
+                    local hum = enemyModel and enemyModel:FindFirstChildOfClass("Humanoid")
+                    if not hum then return end
+                    local enemyHrp = enemyModel:FindFirstChild("HumanoidRootPart")
+
+                    -- Tag creator for XP attribution
                     do
-                        local bv = statsFolder:FindFirstChild("DoTCrit")
-                        dotCritFlag = bv and bv:IsA("BoolValue") and bv.Value or false
+                        local creator = hum:FindFirstChild("creator")
+                        if not creator then
+                            creator = Instance.new("ObjectValue")
+                            creator.Name = "creator"
+                            creator.Value = player
+                            creator.Parent = hum
+                            task.delay(2, function() if creator and creator.Parent then creator:Destroy() end end)
+                        end
                     end
-                    local totalDotBase = baseDamage * eff
-                    local totalDot = dotCritFlag and (totalDotBase * mult) or totalDotBase
-                    DoT.Apply(hum, { totalTime = totalTime, totalDamage = totalDot, tick = 0.25 })
-                end
 
-                -- Call auxiliary on-hit pipeline with context including dealt damage
-                OnHit.Process({ player = player, statsFolder = statsFolder, isCrit = isCrit, dealt = dealt }, hum)
-            end
-        })
+                    -- Read needed stats
+                    local function getNumber(name, default)
+                        local nv = statsFolder:FindFirstChild(name)
+                        if nv and nv:IsA("NumberValue") then return nv.Value end
+                        return default
+                    end
+
+                    local baseDamage = getNumber("BaseDamage", 0)
+                    local dmgPercent = getNumber("DamagePercent", 0)
+                    local dmgMult = 1 + math.max(-0.99, (dmgPercent or 0) / 100)
+                    local critChance = getNumber("CritChance", 0)
+                    local critMult = getNumber("CritDamage", 1)
+
+                    -- Resolve crit and apply damage
+                    local mult, critCount = Crit.Resolve(critChance, critMult)
+                    local isCrit = critCount > 0
+                    local dealt = baseDamage * dmgMult * mult
+                    
+                    -- Apply damage with crit info for damage numbers
+                    local finalDmg = Damage.Apply(hum, dealt, { critCount = critCount })
+
+                    -- SFX 3D: crit toca na part atingida
+                    if hitPart and isCrit then
+                        SFXHelper.playAt(hitPart, CRIT_SFX_ID, 0.85, { minDist = 10, maxDist = 80, lifetime = 2 })
+                    end
+                    
+                    -- Apply Electric chain lightning if player has electric stacks
+                    local Electric = require(ScriptsFolder:WaitForChild("Combat"):WaitForChild("Electric"))
+                    local electricStats = Electric.GetStats(player)
+                    if electricStats and electricStats.chainCount > 0 and electricStats.damagePercent > 0 then
+                        Electric.Apply({
+                            player = player,
+                            originModel = enemy,
+                            damage = baseDamage, -- Use only base damage without multipliers
+                            chainCount = electricStats.chainCount,
+                            damagePercent = electricStats.damagePercent
+                        })
+                    end
+
+                    -- Apply DoT after base damage if enabled
+                    local dotEnabled = false
+                    do
+                        local bv = statsFolder:FindFirstChild("DoTEnabled")
+                        dotEnabled = bv and bv:IsA("BoolValue") and bv.Value or false
+                    end
+                    if dotEnabled then
+                        local totalTime = math.max(0.1, getNumber("DoTTime", 1))
+                        local eff = getNumber("DoTEffectiveness", 1)
+                        local dotCritFlag = false
+                        do
+                            local bv = statsFolder:FindFirstChild("DoTCrit")
+                            dotCritFlag = bv and bv:IsA("BoolValue") and bv.Value or false
+                        end
+                        local totalDotBase = baseDamage * eff
+                        local totalDot = dotCritFlag and (totalDotBase * mult) or totalDotBase
+                        DoT.Apply(hum, { totalTime = totalTime, totalDamage = totalDot, tick = 0.25 })
+                    end
+
+                    -- Call auxiliary on-hit pipeline with context including dealt damage
+                    OnHit.Process({ player = player, statsFolder = statsFolder, isCrit = isCrit, dealt = dealt }, hum)
+                end
+            })
+        end
 
         -- Finish cycle: set next time to post-delay after the fire
         nextAttackTimes[player] = now + (state.postDelay or postDelayDefault)

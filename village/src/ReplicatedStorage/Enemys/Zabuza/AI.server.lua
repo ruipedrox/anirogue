@@ -24,6 +24,10 @@ end
 local Damage = require(ReplicatedStorage:WaitForChild("Scripts"):WaitForChild("Combat"):WaitForChild("Damage"))
 local Projectile = require(ReplicatedStorage:WaitForChild("Scripts"):WaitForChild("Projectile"))
 local WaterDragon = require(enemyModel.Parent:FindFirstChild("WaterDragonProjectile") or ReplicatedStorage:WaitForChild("Enemys"):WaitForChild("Zabuza"):WaitForChild("WaterDragonProjectile"))
+local SFXHelper = require(ReplicatedStorage:WaitForChild("Scripts"):WaitForChild("SFXHelper"))
+
+local DASH_WINDUP_SFX_ID = 127758785414867
+local DASH_SFX_ID        = 88520640334416
 
 -- Extract stat values with defaults
 local MOVE_SPEED = (STATS and STATS.MoveSpeed) or 16
@@ -351,6 +355,7 @@ local function tryDash(now)
 	local corridorWidth = math.max(4, DASH_PATH_TICK_RADIUS * 2)
 	-- Criar o telegraph e mantê-lo durante todo o ataque (windup + hold + dash)
 	local lineTele = createLineTelegraph(root.Position, direction, constantRange, corridorWidth, DASH_TELEGRAPH + 10, Color3.fromRGB(255,70,70))
+	SFXHelper.playAt(root, DASH_WINDUP_SFX_ID, 0.8, { minDist = 15, maxDist = 80, lifetime = 2.5 })
 	-- Durante o windup: Zabuza não se mexe, mas vai girando para o player; telegraph roda junto; comprimento é constante
 	local windupEnd = os.clock() + DASH_TELEGRAPH
 	local lastDir = direction
@@ -460,6 +465,7 @@ local function tryDash(now)
 		end
 	end)
 	
+	SFXHelper.playAt(root, DASH_SFX_ID, 0.9, { minDist = 15, maxDist = 90, lifetime = 1.5 })
 	local dashTrack = playAnim("Dash", 0.05, 1.0, 1.0)
 	local releaseDashPose = holdLastKeyframePose(dashTrack)
 	
@@ -575,6 +581,7 @@ local function tryWaterDragon(now)
 	if root then root.Anchored = true end -- Ancorar para não se mexer durante cast
 	
 	local tele = createLineTelegraph(root.Position, dir, corridorLength, corridorWidth, 3.0, Color3.fromRGB(90,140,255))
+	SFXHelper.playAt(root, 131299962671842, 0.8, { minDist = 15, maxDist = 90, lifetime = 3.5 })
 	
 	-- Tocar animação Cast completa
 	local castTrack = playAnim("Cast", 0.1, 1.0, 1.0)

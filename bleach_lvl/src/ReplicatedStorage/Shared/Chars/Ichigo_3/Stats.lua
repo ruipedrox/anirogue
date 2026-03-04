@@ -3,7 +3,9 @@ local IchigoStats = {}
 -- Display metadata
 IchigoStats.name = "Soul Reaper" -- Ichigo, 3-star
 IchigoStats.stars = 3
-IchigoStats.icon = 0 -- Substitui com o ID do ícone quando tiveres
+IchigoStats.icon = 106645894312244 -- Substitui com o ID do ícone quando tiveres
+-- Flag: whether this template supports evolution (UI reads from Stats)
+IchigoStats.can_evolve = true
 -- DAMAGE DEALER focused (high damage, low HP)
 IchigoStats.Passives = {
 	BaseDamage = 40,
