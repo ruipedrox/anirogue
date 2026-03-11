@@ -106,7 +106,7 @@ local function grantBuff(player, stats)
         if hrp2 then
             SFXHelper.playAt(hrp2, GEAR_SFX_ID, 0.9, { minDist = 15, maxDist = 80, lifetime = 5 })
         end
-    end on the player's HRP while buff is active
+        end
     local vapeAttachment, vapeEmitter
     do
         local char = player and player.Character

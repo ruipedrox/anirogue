@@ -5,7 +5,7 @@ return {
 	evolve_to = "XP5",
 	required_level = 1,              -- Não precisa level
 	cost = {
-		Gold = 5000,                 -- 4★ -> 5★ gold cost
+		Gold = 25000,                 -- 4★ -> 5★ gold cost
 	},
 	copies_req = {
 		{ template = "XP4", count = 3 }, -- 3 XP4 (incluindo a que evolui)

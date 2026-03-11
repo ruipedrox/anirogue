@@ -2,7 +2,7 @@ local ReplicatedStorage = game:GetService("ReplicatedStorage")
 
 -- Referências aos ModuleScripts (Instances) dos itens default
 -- Mantemos a pasta Items/Rings como está (plural), mas o player equipa apenas 1 anel.
-local DefaultWeaponModule = ReplicatedStorage.Shared.Items.Weapons.Kunai:WaitForChild("Stats")
+local DefaultWeaponModule = ReplicatedStorage.Shared.Items.Weapons.Z_sword:WaitForChild("Stats")
 local DefaultArmorModule = ReplicatedStorage.Shared.Items.Armors.ClothArmor:WaitForChild("Stats")
 local DefaultRingModule = ReplicatedStorage.Shared.Items.Rings.IronRing:WaitForChild("Stats")
 local ItemsRegistry = require(ReplicatedStorage.Shared.Items:WaitForChild("Registry"))

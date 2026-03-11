@@ -249,9 +249,12 @@ function def.OnUnequip(player)
     Active[player] = nil
 end
 
+
 function def.OnCardAdded(player, defTable, level)
     def.OnEquip(player, level or 1, defTable and tonumber(defTable.maxLevel))
-end(player, newLevel)
+end
+
+function def.OnLevelUp(player, newLevel)
     local data = Active[player]
     if not data then return end
     local myFolder = data.folder

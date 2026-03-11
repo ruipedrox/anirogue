@@ -20,7 +20,7 @@ local running: { [Player]: RBXScriptConnection } = {}
 -- Orientation offsets (adjust if your models are built along Y-axis)
 local ROTATE_X = math.rad(90) -- rotate 90 degrees around X to lay beam horizontally
 local FORWARD_OFFSET_CHARGE = -2
-local FORWARD_OFFSET_BEAM = 4
+local FORWARD_OFFSET_BEAM = -4
 
 local function getStats(player: Player)
 	local stats = player:FindFirstChild("Stats")
@@ -257,6 +257,7 @@ function M.Start(player: Player)
 		busy.Value = true
 
 		-- Charge phase (scale up over ChargeTime)
+		SFXHelper.playAt(hrp, KAMEHAMEHA_SFX_ID, 0.9, { minDist = 15, maxDist = 120, lifetime = durationNV.Value + 1 })
 		local charge = chargeTemplate:Clone()
 		charge.Name = "Kame_Charge_Instance"
 		charge.Parent = character
@@ -284,7 +285,7 @@ function M.Start(player: Player)
 		pcall(function() charge:Destroy() end)
 
 		-- Fire beam
-		SFXHelper.playAt(hrp, KAMEHAMEHA_SFX_ID, 0.9, { minDist = 15, maxDist = 120, lifetime = durationNV.Value + 1 })
+		
 		local beam = beamTemplate:Clone()
 		beam.Name = "Kamehameha_Instance"
 		beam.Parent = character
@@ -314,7 +315,7 @@ function M.Start(player: Player)
 			beamTemplate:SetAttribute("BaseForwardSize", baseForwardSize)
 			-- Distância que a face traseira tinha originalmente (offset para frente - metade do comprimento)
 			-- FORWARD_OFFSET_BEAM é negativo (para frente). Distância positiva para frente = -FORWARD_OFFSET_BEAM.
-			backFaceDist = (-FORWARD_OFFSET_BEAM) - (baseForwardSize / 2)
+			backFaceDist = (FORWARD_OFFSET_BEAM-(baseForwardSize/2))
 			beamTemplate:SetAttribute("BackFaceDistance", backFaceDist)
 		else
 			backFaceDist = backFaceDist or 0

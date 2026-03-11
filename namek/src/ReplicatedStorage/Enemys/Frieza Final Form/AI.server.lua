@@ -11,6 +11,9 @@ local ScriptsFolder = ReplicatedStorage:WaitForChild("Scripts")
 local CombatFolder = ScriptsFolder:WaitForChild("Combat")
 local Damage = require(CombatFolder:WaitForChild("Damage"))
 local Projectile = require(ScriptsFolder:WaitForChild("Projectile"))
+local SFXHelper = require(ScriptsFolder:WaitForChild("SFXHelper"))
+local NORMAL_SFX_ID = 121178512150630
+local DEATH_BEAM_SFX_ID = 117955134437670
 
 -- Find Death_beam, destructo_disk, and Super_nova models from Enemys/Attacks folder
 local EnemysFolder = ReplicatedStorage:WaitForChild("Enemys")
@@ -286,6 +289,7 @@ end)
 -- Death Beam attack function
 local function fireDeathBeam(targetPos)
 	if not leftAttachment then return end
+	SFXHelper.playAt(root, DEATH_BEAM_SFX_ID, 0.7, { minDist = 10, maxDist = 80 })
 	
 	-- Clone Death_beam model
 	local beam = deathBeamModel:Clone()
@@ -407,7 +411,7 @@ end
 -- Fire death beam barrage (multiple lasers in random directions within cone)
 local function fireDeathBeamBarrage()
 	if not running or not leftAttachment or not leftHand then return end
-	
+
 	-- Damage loop: continuously damage players inside cone
 	local damageActive = true
 	local damageThread = task.spawn(function()
@@ -529,6 +533,8 @@ local function fireDestructoDisc(targetPos)
 		return 
 	end
 	
+	SFXHelper.playAt(root, 117381389817040, 0.7, { minDist = 10, maxDist = 80 })
+	
 	isAttacking = true -- Lock rotation during disc attack
 	
 	-- Clone discs for both hands
@@ -647,6 +653,7 @@ local function fireDestructoDisc(targetPos)
 	task.delay(2, function()
 		leftActive = false -- Stop follow loop
 		if not running or not root then return end
+		SFXHelper.playAt(root, 139665895552627, 0.7, { minDist = 10, maxDist = 80 })
 		
 		-- Get launch position and direction
 		local launchPos = leftAttachment and leftAttachment.WorldPosition or (root.Position + Vector3.new(0, 2, 0))
@@ -690,6 +697,7 @@ local function fireDestructoDisc(targetPos)
 	task.delay(3, function()
 		rightActive = false -- Stop follow loop
 		if not running or not root then return end
+		SFXHelper.playAt(root, 139665895552627, 0.7, { minDist = 10, maxDist = 80 })
 		
 		-- Get launch position and direction
 		local launchPos = rightAttachment and rightAttachment.WorldPosition or (root.Position + Vector3.new(0, 2, 0))
@@ -987,6 +995,7 @@ task.spawn(function()
 					pcall(function()
 						deathBeamAnim:Play(0.05, 1, 1)
 					end)
+					SFXHelper.playAt(root, DEATH_BEAM_SFX_ID, 0.7, { minDist = 10, maxDist = 80 })
 					
 					-- Wait 1 second before starting barrage
 					task.wait(1)
@@ -1044,6 +1053,7 @@ task.spawn(function()
 						superNovaAnim:Play(0.1, 1, 1)
 					end)
 				end
+				SFXHelper.playAt(root, 117955134437670, 0.7, { minDist = 10, maxDist = 80 })
 				
 				print("[Frieza] About to call fireSuperNova with snapshot position...")
 				
@@ -1082,9 +1092,7 @@ task.spawn(function()
 						pcall(function()
 							attackAnim:Play(0.05, 1, 1) -- Normal speed
 						end)
-						
-						-- Wait for animation to complete then unlock rotation
-						task.wait(attackAnim.Length or 1)
+				SFXHelper.playAt(root, NORMAL_SFX_ID, 0.7, { minDist = 10, maxDist = 70 })
 						isAttacking = false
 					else
 						-- Fallback if no animation

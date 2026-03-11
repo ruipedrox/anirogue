@@ -11,6 +11,10 @@ local HttpService = game:GetService("HttpService")
 local CollectionService = game:GetService("CollectionService")
 local ServerScriptService = game:GetService("ServerScriptService")
 
+-- Infinite mode: permanent death. Disable auto-respawn so the DeathMenu persists
+-- and the player must choose Restart or Exit explicitly.
+Players.CharacterAutoLoads = false
+
 local ScriptsFolder = ReplicatedStorage:WaitForChild("Scripts")
 local sharedFolder = ReplicatedStorage:WaitForChild("Shared")
 local EnemyStats
@@ -73,6 +77,9 @@ end
 local DS_GLOBAL = nil
 -- Forward declare to allow earlier references (e.g., endRun) to call after it's defined
 local buildAggregatedRunResult
+
+-- Grace period (seconds) after all players are dead before triggering endRun
+local DEFEAT_GRACE_SECONDS = 3
 
 -- Infinite mode evolve drop configuration (probabilities are independent of XP drops)
 -- Both drops have 40% independent chance every 10 waves
@@ -1653,8 +1660,10 @@ Players.PlayerRemoving:Connect(function(player)
 				local hasChar = (type(aggregated.CharacterXP) == "table" and next(aggregated.CharacterXP) ~= nil)
 				local rew = aggregated.Rewards or {}
 				local itemsCount = (type(rew.Items) == "table") and #rew.Items or 0
-				local hasRewards = (tonumber(rew.Gold) or 0) > 0 or (tonumber(rew.Gems) or 0) > 0 or itemsCount > 0
-				local shouldSave = hasAccount or hasChar or hasRewards or (aggregated.Win == true)
+				local hasCharRewards = (type(rew.Characters) == "table" and #rew.Characters > 0)
+				local hasDamage = (tonumber(aggregated.TotalDamage) or 0) > 0
+				local hasRewards = (tonumber(rew.Gold) or 0) > 0 or (tonumber(rew.Gems) or 0) > 0 or itemsCount > 0 or hasCharRewards
+				local shouldSave = hasAccount or hasChar or hasRewards or hasDamage or (aggregated.Win == true)
 				if shouldSave then
 					pcall(function()
 						local runId = HttpService:GenerateGUID(false)
@@ -2152,7 +2161,7 @@ buildAggregatedRunResult = function(plr)
 	end)
 	local result = { Win = (attrWin ~= nil) and attrWin or (last and last.Win or false), AccountXP = 0, CharacterXP = {}, Rewards = { Gold = 0, Gems = 0, Items = {} } }
 
-	-- 0) Merge live accumulated values from RunAccum (AccountXP and CharacterXP) so a single run return applies XP
+	-- 0) Merge live accumulated values from RunAccum (AccountXP, CharacterXP, and Rewards) so a single run return applies XP and milestone rewards
 	do
 		local axp = ra and ra:FindFirstChild("AccountXP")
 		if axp and axp:IsA("NumberValue") and (tonumber(axp.Value) or 0) > 0 then
@@ -2173,7 +2182,35 @@ buildAggregatedRunResult = function(plr)
 					result.CharacterXP[key] = (result.CharacterXP[key] or 0) + (tonumber(nv.Value) or 0)
 				end
 			end
-
+		end
+		-- Merge infinite mode milestone rewards stored directly in RunAccum/Rewards
+		local runRew = ra and ra:FindFirstChild("Rewards")
+		if runRew then
+			local g = runRew:FindFirstChild("Gold")
+			if g then result.Rewards.Gold = result.Rewards.Gold + (tonumber(g.Value) or 0) end
+			local ge = runRew:FindFirstChild("Gems")
+			if ge then result.Rewards.Gems = result.Rewards.Gems + (tonumber(ge.Value) or 0) end
+			local itemsFolder = runRew:FindFirstChild("Items")
+			if itemsFolder then
+				for _, iv in ipairs(itemsFolder:GetChildren()) do
+					local id = tostring(iv.Name); local q = tonumber(iv.Value) or 0
+					if id ~= "" and q > 0 then
+						table.insert(result.Rewards.Items, { Id = id, Quantity = q })
+					end
+				end
+			end
+			-- Also merge Characters (XP chars) from RunAccum/Rewards/Characters if present
+			-- These go into result.Rewards.Characters (separate from Items) so lobby calls CharacterService:AddCharacter
+			local charsVal = runRew:FindFirstChild("Characters")
+			if charsVal and charsVal:IsA("StringValue") and charsVal.Value ~= "" then
+				local okC, chars = pcall(function() return HttpService:JSONDecode(charsVal.Value) end)
+				if okC and type(chars) == "table" and #chars > 0 then
+					result.Rewards.Characters = result.Rewards.Characters or {}
+					for _, charId in ipairs(chars) do
+						table.insert(result.Rewards.Characters, tostring(charId))
+					end
+				end
+			end
 		end
 	end
 
@@ -2451,6 +2488,8 @@ end)
 
 RunReturnToLobbyRE.OnServerEvent:Connect(function(player)
 	if not player then return end
+	-- Ensure run is marked ended (idempotent — endRun guards against double-call)
+	if not runEnded then endRun(false) end
 	local aggregated = buildAggregatedRunResult(player)
 	-- Cache JSON for client-visible verification prior to teleport
 	pcall(function()

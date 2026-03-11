@@ -11,13 +11,12 @@ local HttpService = game:GetService("HttpService")
 local CollectionService = game:GetService("CollectionService")
 local ServerScriptService = game:GetService("ServerScriptService")
 
+-- Disable auto-respawn: characters only respawn when the server explicitly calls LoadCharacter().
+-- Without this, Roblox respawns the player automatically on death, bypassing the DeathMenu.
+Players.CharacterAutoLoads = false
+
 local ScriptsFolder = ReplicatedStorage:WaitForChild("Scripts")
 local sharedFolder = ReplicatedStorage:WaitForChild("Shared")
-local EnemyStats
-do
-	local ok, mod = pcall(function() return require(ScriptsFolder:WaitForChild("EnemyStats")) end)
-	if ok and type(mod) == "table" then EnemyStats = mod end
-end
 
 -- Ensure Remotes folder exists as early as possible so clients waiting on it don't hang
 local Remotes = ReplicatedStorage:FindFirstChild("Remotes")
@@ -27,20 +26,17 @@ if not Remotes then
 	Remotes.Parent = ReplicatedStorage
 end
 
+-- Revive / purchase integration
+local MarketplaceService = game:GetService("MarketplaceService")
+local REVIVE_PRODUCT_ID = 3553813106
+local DEFEAT_GRACE_SECONDS = 2
+local REVIVE_INVINCIBILITY_SECONDS = 3
+local lastAliveTimestamp = os.clock()
+
 -- Predeclare DataStores handle so functions defined earlier (e.g., endRun) can reference it reliably
 local DS_GLOBAL = nil
 -- Forward declare to allow earlier references (e.g., endRun) to call after it's defined
 local buildAggregatedRunResult
-
--- Infinite mode evolve drop configuration (probabilities are independent of XP drops)
--- Both drops have 40% independent chance every 10 waves
-local INFINITE_EVOLVE_SHARD_CHANCE = 0.40
-local INFINITE_EVOLVE_CORE_CHANCE = 0.40
--- Random quantity ranges
-local INFINITE_EVOLVE_SHARD_MIN = 2
-local INFINITE_EVOLVE_SHARD_MAX = 4
-local INFINITE_EVOLVE_CORE_MIN = 1
-local INFINITE_EVOLVE_CORE_MAX = 2
 
 -- Mark a server script version for live verification (client-readable)
 pcall(function()
@@ -221,178 +217,8 @@ local function configureWaveManagerCallbacks(inst)
 	end
 
 	_server_OnWaveCleared = function(waveIndex)
-		-- Grant wave XP to all players
 		for _, plr in ipairs(Players:GetPlayers()) do
 			pcall(function() grantWaveCharacterXP(plr, waveIndex) end)
-		end
-		
-		-- INFINITE MODE: Milestone rewards every 10 waves
-		if waveIndex % 10 == 0 then
-			for _, plr in ipairs(Players:GetPlayers()) do
-				pcall(function()
-					local ra = plr:FindFirstChild("RunAccum")
-					if not ra then return end
-					
-					local rew = ra:FindFirstChild("Rewards")
-					if not rew then
-						rew = Instance.new("Folder")
-						rew.Name = "Rewards"
-						rew.Parent = ra
-					end
-					
-					-- Ensure Gold and Gems values exist
-					local goldVal = rew:FindFirstChild("Gold")
-					if not goldVal then
-						goldVal = Instance.new("IntValue")
-						goldVal.Name = "Gold"
-						goldVal.Value = 0
-						goldVal.Parent = rew
-					end
-					
-					local gemsVal = rew:FindFirstChild("Gems")
-					if not gemsVal then
-						gemsVal = Instance.new("IntValue")
-						gemsVal.Name = "Gems"
-						gemsVal.Value = 0
-						gemsVal.Parent = rew
-					end
-					
-					-- Calculate milestone tier (10, 20, 30...)
-					local wavesTier = waveIndex / 10
-					
-					-- Base rewards (scales with tier)
-					local baseGold = 50 + (wavesTier * 30)
-					local baseGems = 5 + math.floor(wavesTier * 0.5)
-					-- Character/Account XP: starts lower than story, scales exponentially
-					-- Formula: 30 + (tier^1.8 * 15)
-					-- Wave 10: ~45 XP, Wave 20: ~82 XP, Wave 50: ~286 XP, Wave 100: ~975 XP
-					local charXP = math.floor(30 + (math.pow(wavesTier, 1.8) * 15))
-					
-					-- Add base rewards
-					goldVal.Value = goldVal.Value + baseGold
-					gemsVal.Value = gemsVal.Value + baseGems
-					
-					-- Add XP character (70% XP3, 30% XP4)
-					local charsVal = rew:FindFirstChild("Characters")
-					if not charsVal then
-						charsVal = Instance.new("StringValue")
-						charsVal.Name = "Characters"
-						charsVal.Value = "[]"
-						charsVal.Parent = rew
-					end
-					
-					local chars = {}
-					pcall(function()
-						chars = HttpService:JSONDecode(charsVal.Value)
-						if type(chars) ~= "table" then chars = {} end
-					end)
-					
-					-- 70% chance XP3 character, 30% chance XP4 character
-					local xpChar = (math.random() <= 0.7) and "XP3" or "XP4"
-					table.insert(chars, xpChar)
-					
-					charsVal.Value = HttpService:JSONEncode(chars)
-					
-					-- Grant Character XP to all equipped characters
-					local equippedChars = CharactersModule:GetEquipped(plr)
-					if equippedChars and #equippedChars > 0 then
-						for _, charData in ipairs(equippedChars) do
-							local instanceId = charData.InstanceId
-							if instanceId then
-								-- Track per-character XP in RunAccum/CharacterXP/<InstanceId>
-								local charXPFolder = ra:FindFirstChild("CharacterXP")
-								if not charXPFolder then
-									charXPFolder = Instance.new("Folder")
-									charXPFolder.Name = "CharacterXP"
-									charXPFolder.Parent = ra
-								end
-								
-								local instanceVal = charXPFolder:FindFirstChild(tostring(instanceId))
-								if not instanceVal then
-									instanceVal = Instance.new("IntValue")
-									instanceVal.Name = tostring(instanceId)
-									instanceVal.Value = 0
-									instanceVal.Parent = charXPFolder
-								end
-								
-								instanceVal.Value = instanceVal.Value + charXP
-							end
-						end
-					end
-					
-					-- Grant Account XP (sum of all character XP)
-					local accountXP = charXP * math.max(1, #equippedChars)
-					local accXPVal = ra:FindFirstChild("AccountXP")
-					if not accXPVal then
-						accXPVal = Instance.new("IntValue")
-						accXPVal.Name = "AccountXP"
-						accXPVal.Value = 0
-						accXPVal.Parent = ra
-					end
-					accXPVal.Value = accXPVal.Value + accountXP
-					
-					print(string.format("[Infinite] Wave %d milestone: %s received %d gold, %d gems, 1x %s char, %d char XP (%d chars), %d account XP", 
-						waveIndex, plr.Name, baseGold, baseGems, xpChar, charXP, #equippedChars, accountXP))
-
-					-- Independent evolve item drops every 10 waves (do not affect XP drops)
-					local itemsFolder = rew:FindFirstChild("Items")
-					if not itemsFolder then
-						itemsFolder = Instance.new("Folder")
-						itemsFolder.Name = "Items"
-						itemsFolder.Parent = rew
-					end
-
-					local function addItem(id, qty)
-						local iv = itemsFolder:FindFirstChild(id)
-						if not iv then
-							iv = Instance.new("IntValue")
-							iv.Name = id
-							iv.Value = 0
-							iv.Parent = itemsFolder
-						end
-						iv.Value = iv.Value + (tonumber(qty) or 0)
-					end
-
-					-- Roll independently for shard and core
-					if math.random() <= INFINITE_EVOLVE_SHARD_CHANCE then
-						local qty = math.random(INFINITE_EVOLVE_SHARD_MIN, INFINITE_EVOLVE_SHARD_MAX)
-						addItem("evolve_shard", qty)
-						print(string.format("[Infinite] Wave %d: %s received %dx evolve_shard", waveIndex, plr.Name, qty))
-					end
-
-					if math.random() <= INFINITE_EVOLVE_CORE_CHANCE then
-						local qty = math.random(INFINITE_EVOLVE_CORE_MIN, INFINITE_EVOLVE_CORE_MAX)
-						addItem("evolve_core", qty)
-						print(string.format("[Infinite] Wave %d: %s received %dx evolve_core", waveIndex, plr.Name, qty))
-					end
-					
-					-- Check for first time bonus
-					-- This needs to check player data - we'll track in Infinite.MilestonesReached
-					-- For now, mark in a temporary attribute to handle in endRun/save
-					local milestonesReached = plr:GetAttribute("InfiniteMilestonesReached") or ""
-					local milestoneKey = tostring(waveIndex)
-					
-					if not string.find(milestonesReached, milestoneKey) then
-						-- First time reaching this milestone!
-						local bonusGold = 100 + (wavesTier * 50)
-						local bonusGems = 5 + math.floor(wavesTier * 2)
-						
-						goldVal.Value = goldVal.Value + bonusGold
-						gemsVal.Value = gemsVal.Value + bonusGems
-						
-						-- Mark milestone as reached
-						if milestonesReached == "" then
-							milestonesReached = milestoneKey
-						else
-							milestonesReached = milestonesReached .. "," .. milestoneKey
-						end
-						plr:SetAttribute("InfiniteMilestonesReached", milestonesReached)
-						
-						print(string.format("[Infinite] FIRST TIME BONUS! Wave %d: %s received +%d gold, +%d gems", 
-							waveIndex, plr.Name, bonusGold, bonusGems))
-					end
-				end)
-			end
 		end
 	end
 
@@ -425,56 +251,6 @@ local function configureWaveManagerCallbacks(inst)
 		if typeof(prevDied) == "function" then pcall(prevDied, info) end
 		_server_OnEnemyDied(info)
 	end
-	
-	-- Add enemy type label above each spawned enemy
-	inst.OnEnemySpawned = function(info)
-		if not info or not info.enemy or not info.type then return end
-		
-		pcall(function()
-			local enemyModel = info.enemy
-			local enemyType = info.type
-			
-			-- Determine color based on type
-			local typeColors = {
-				melee = Color3.fromRGB(255, 255, 255),  -- White
-				ranged = Color3.fromRGB(255, 255, 0),   -- Yellow
-				cloner = Color3.fromRGB(150, 0, 255),   -- Purple
-				regen = Color3.fromRGB(0, 255, 0),      -- Green
-			}
-			
-			local color = typeColors[enemyType] or Color3.fromRGB(200, 200, 200)
-			
-			-- Find the head or humanoid root part to attach the label
-			local attachPart = enemyModel:FindFirstChild("Head") or enemyModel:FindFirstChild("HumanoidRootPart")
-			if not attachPart then 
-				print("[TypeLabel] No Head/HumanoidRootPart found on", enemyModel.Name)
-				return 
-			end
-			
-			-- Create billboard GUI
-			local billboard = Instance.new("BillboardGui")
-			billboard.Name = "TypeLabel"
-			billboard.Size = UDim2.new(0, 60, 0, 20)
-			billboard.StudsOffset = Vector3.new(0, 6, 0)  -- Higher offset to be above health bar
-			billboard.AlwaysOnTop = true
-			billboard.Adornee = attachPart
-			billboard.Parent = attachPart
-			
-			-- Create text label
-			local label = Instance.new("TextLabel")
-			label.Size = UDim2.new(1, 0, 1, 0)
-			label.BackgroundTransparency = 1
-			label.Text = string.upper(enemyType)
-			label.TextColor3 = color
-			label.TextStrokeTransparency = 0
-			label.TextStrokeColor3 = Color3.fromRGB(0, 0, 0)
-			label.Font = Enum.Font.FredokaOne
-			label.TextScaled = true
-			label.Parent = billboard
-			
-			print(string.format("[TypeLabel] Created label for %s enemy at %s", enemyType, attachPart.Name))
-		end)
-	end
 end
 
 local function ensureWaveManager()
@@ -483,147 +259,13 @@ local function ensureWaveManager()
 		warn("[Script] WaveManager module missing or has no .new() constructor")
 		return nil
 	end
-	
-	-- [Infinite Mode] Create procedural wave config instead of loading from file
-	local infiniteWaveConfig = {
-		InfiniteMode = true,
-		RepeatWavesStart = 51,
-		RepeatWavesEnd = 60,
-		Waves = {},
-		Rates = {},
-		-- Generate waves 1-60 (base waves before infinite loop)
-		GenerateWave = function(waveIndex)
-			-- Enemy types: Melee (40%), Ranged (30%), Regen (15%), Cloner (15%)
-			-- Cloners only appear from wave 10 onwards
-			local totalEnemies = math.floor(5 + waveIndex * 0.5)
-			
-			-- Distribute enemies by type
-			local meleeCount, rangedCount, regenCount, clonerCount
-			
-			if waveIndex < 10 then
-				-- Before wave 10: no cloners, redistribute to other types
-				meleeCount = math.floor(totalEnemies * 0.50)
-				rangedCount = math.floor(totalEnemies * 0.35)
-				regenCount = totalEnemies - meleeCount - rangedCount
-				clonerCount = 0
-			else
-				-- Wave 10+: normal distribution with cloners
-				meleeCount = math.floor(totalEnemies * 0.40)
-				rangedCount = math.floor(totalEnemies * 0.30)
-				regenCount = math.floor(totalEnemies * 0.15)
-				clonerCount = totalEnemies - meleeCount - rangedCount - regenCount
-			end
-			
-			-- Scale HP and Damage based on wave number (now using 20% compounded per wave)
-			local hpScale = math.pow(1.2, waveIndex - 1)
-			local dmgScale = math.pow(1.2, waveIndex - 1)
-			-- XP scales moderately per wave (+8% per wave - slower than level requirement growth)
-			local xpScale = 1 + (waveIndex - 1) * 0.08
-			
-			local enemies = {}
-			
-			-- Add Melee enemies (use EnemyStats base values, then apply per-wave scaling)
-			if meleeCount > 0 then
-				local meleeStats = EnemyStats.GetByType("melee") or {}
-				local baseHealth = (meleeStats.Health and tonumber(meleeStats.Health)) or 50
-				local baseDamageVal = (meleeStats.Damage and tonumber(meleeStats.Damage)) or 5
-				table.insert(enemies, {
-					type = "melee",
-					count = meleeCount,
-					baseHP = math.floor(baseHealth * hpScale),
-					baseDamage = math.floor(baseDamageVal * dmgScale),
-					xp = math.floor(15 * xpScale),
-				})
-			end
-			
-			-- Add Ranged enemies (use EnemyStats base values, then apply per-wave scaling)
-			if rangedCount > 0 then
-				local rangedStats = EnemyStats.GetByType("ranged") or {}
-				local baseHealth = (rangedStats.Health and tonumber(rangedStats.Health)) or 40
-				local baseDamageVal = (rangedStats.Damage and tonumber(rangedStats.Damage)) or 4
-				table.insert(enemies, {
-					type = "ranged",
-					count = rangedCount,
-					baseHP = math.floor(baseHealth * hpScale),
-					baseDamage = math.floor(baseDamageVal * dmgScale),
-					xp = math.floor(18 * xpScale),
-				})
-			end
-			
-			-- Add Regen enemies
-				if regenCount > 0 then
-					local regenStats = EnemyStats.GetByType("regen") or {}
-					local baseHealth = (regenStats.Health and tonumber(regenStats.Health)) or 70
-					local baseDamageVal = (regenStats.Damage and tonumber(regenStats.Damage)) or 6
-					table.insert(enemies, {
-						type = "regen",
-						count = regenCount,
-						baseHP = math.floor(baseHealth * hpScale),
-						baseDamage = math.floor(baseDamageVal * dmgScale),
-						xp = math.floor(24 * xpScale),
-					})
-				end
-			
-			-- Add Cloner enemies
-			if clonerCount > 0 then
-				local clonerStats = EnemyStats.GetByType("cloner") or {}
-				local baseHealth = (clonerStats.Health and tonumber(clonerStats.Health)) or 60
-				local baseDamageVal = (clonerStats.Damage and tonumber(clonerStats.Damage)) or 5
-				table.insert(enemies, {
-					type = "cloner",
-					count = clonerCount,
-					baseHP = math.floor(baseHealth * hpScale),
-					baseDamage = math.floor(baseDamageVal * dmgScale),
-					xp = math.floor(28 * xpScale),
-				})
-			end
-			
-			return { enemies = enemies }
-		end
-	}
-	
-	-- Generate initial 60 waves
-	for i = 1, 60 do
-		infiniteWaveConfig.Waves[i] = infiniteWaveConfig.GenerateWave(i)
-	end
-	
-	local cfg = { 
-		LevelName = "infinite",
-		InfiniteMode = true,
-		-- Inject the wave config directly so WaveManager uses it
-		_InfiniteConfig = infiniteWaveConfig,
-		-- Burst spawning configuration
-		Burst = {
-			StartWave = 3,
-			Min = 4,
-			Max = 8,
-		},
-		-- Spawn areas (infinite map)
-		SpawnAreas = {
-			{
-				corners = {
-					Vector3.new(89.99, 35.589, -129.819),
-					Vector3.new(201.99, 35.589, -129.819),
-					Vector3.new(201.99, 35.589, -17.819),
-					Vector3.new(89.99, 35.589, -17.819),
-				},
-				Y = 35.589,
-			}
-		},
-		-- Arena bounds for random target generation
-		ArenaBounds = {
-			min = Vector3.new(89.99, 35.589, -129.819),
-			max = Vector3.new(201.99, 35.589, -17.819),
-		},
-	}
+	local levelName = ReplicatedStorage:GetAttribute("LevelName") or "lvl1"
+	local cfg = { LevelName = levelName }
 	local ok, inst = pcall(function() return WaveManagerModule.new(cfg) end)
 	if ok and inst then
-		-- Override WaveConfig with our procedural one
-		inst.WaveConfig = infiniteWaveConfig
-		inst.Waves = infiniteWaveConfig.Waves
 		waveManager = inst
 		configureWaveManagerCallbacks(inst)
-		print(string.format("[WaveManager] Instantiated with InfiniteMode (TotalWaves=%d, will repeat 51-60 infinitely)", #(inst.Waves or {})))
+		print(string.format("[WaveManager] Instantiated with LevelName=%s (TotalWaves=%d)", tostring(levelName), #(inst.Waves or {})))
 		return inst
 	else
 		warn("[Script] Failed to instantiate WaveManager:", inst)
@@ -830,9 +472,30 @@ local function saveThenTeleportToReturnPlace(returnPlaceId, playerOrList, runRes
 	end
 	return true
 end
-
--- [Infinite Mode] No wave config needed - waves are generated procedurally
-print("[InfiniteMode] Ready - waves will be generated dynamically")
+-- Waves config loader: pick by ReplicatedStorage.LevelName (lvl1/lvl2/lvl3)
+local wavesConfig
+local function reloadWavesConfig()
+	local levelName = ReplicatedStorage:GetAttribute("LevelName") or "lvl1"
+	local ok, cfg = pcall(function()
+		return require(ScriptsFolder:WaitForChild(levelName):WaitForChild("WaveConfig"))
+	end)
+	if ok and type(cfg) == "table" then
+		wavesConfig = cfg
+		print(string.format("[WavesConfig] Loaded %s/WaveConfig", tostring(levelName)))
+	else
+		warn("[WavesConfig] Failed to load for level:", tostring(levelName), cfg)
+	end
+end
+reloadWavesConfig()
+pcall(function()
+	ReplicatedStorage:GetAttributeChangedSignal("LevelName"):Connect(function()
+		reloadWavesConfig()
+		-- Optional: notify waveManager if it supports dynamic reload
+		if waveManager and type(waveManager.ReloadLevel) == "function" then
+			pcall(function() waveManager:ReloadLevel(ReplicatedStorage:GetAttribute("LevelName")) end)
+		end
+	end)
+end)
 local CharacterInventory = require(ScriptsFolder:WaitForChild("CharacterInventory"))
 
 -- Card system modules (needed for applying chosen cards)
@@ -853,7 +516,9 @@ local LevelUpChoice = Remotes:FindFirstChild("LevelUpChoice") or Instance.new("R
 LevelUpChoice.Name = "LevelUpChoice"
 LevelUpChoice.Parent = Remotes
 -- DeathMenu remotes
--- Revive removed: Infinite mode has permanent death for leaderboard integrity
+local DeathMenuRevive = Remotes:FindFirstChild("DeathMenuRevive") or Instance.new("RemoteEvent")
+DeathMenuRevive.Name = "DeathMenuRevive"
+DeathMenuRevive.Parent = Remotes
 local DeathMenuRestart = Remotes:FindFirstChild("DeathMenuRestart") or Instance.new("RemoteEvent")
 DeathMenuRestart.Name = "DeathMenuRestart"
 DeathMenuRestart.Parent = Remotes
@@ -1097,9 +762,6 @@ local offerCardsToPlayer
 -- PendingOffers[player] = { [cardId] = metaTable }
 local PendingOffers: { [Player]: { [string]: any } } = {}
 
--- Track pending level ups for each player (for multi-level gains)
-local PendingLevelUps: { [Player]: number } = {}
-
 -- Expose a named implementation so configureWaveManagerCallbacks can call it
 function Server_OnEnemyDied_Impl(info)
 	local humanoid = info.enemy:FindFirstChildOfClass("Humanoid")
@@ -1140,21 +802,15 @@ function Server_OnEnemyDied_Impl(info)
 				deathPos = pp and pp.Position or nil
 			end
 		end
-		
-		print(string.format("[XP Debug] Enemy %s dropped %d XP (type: %s, wave: %s)", 
-			info.enemy.Name, info.drops.XP, tostring(info.type), tostring(info.waveIndex)))
-		
 		local gained = Leveling:AddXP(killer, info.drops.XP)
 		if gained > 0 then
-			print(string.format("%s gained %d level(s), now level %d", killer.Name, gained, (killer:FindFirstChild("Stats") and killer.Stats.Level.Value or "?")))
-			
-			-- Accumulate pending level ups
-			PendingLevelUps[killer] = (PendingLevelUps[killer] or 0) + gained
-			
-			-- Offer cards on level up (will show UI for first level, queue the rest)
+			-- Optionally notify or log
+			print(killer.Name .. " leveled up to " .. (killer:FindFirstChild("Stats") and killer.Stats.Level.Value or "?"))
+			-- Offer cards on level up
 			if offerCardsToPlayer then
 				offerCardsToPlayer(killer)
 			end
+
 		end
 		-- Also log kill attribution for telemetry verification
 		pcall(function()
@@ -1185,7 +841,7 @@ function Server_OnEnemyDied_Impl(info)
 						print(string.format("[ShadowClone] Spawn at deathPos (%.1f, %.1f, %.1f); player at %s",
 							deathPos.X, deathPos.Y, deathPos.Z,
 							kpos and string.format("(%.1f, %.1f, %.1f)", kpos.X, kpos.Y, kpos.Z) or "(nil)"
-						))
+							))
 					end)
 					-- Carregamento lazy: obter módulo só se necessário
 					local shadowMod = CardDispatcher.GetModule("ShadowClone")
@@ -1326,73 +982,73 @@ do
 			if d:IsA("BasePart") then
 				d.CanCollide = false
 				d.CanTouch = false
-		-- DEBUG: log join payload, equipped templates/stats, characters and computed Health
-		pcall(function()
-			local js = "[InitDebug]"
-			local join = player:GetJoinData()
-			local jtd = join and join.TeleportData
-			if jtd then
-				local s = jtd.Story
-				print(js, "Join TeleportData present for", player.Name, "Story=", s and tostring(s.MapId) or "nil", "Level=", s and tostring(s.Level) or "nil", "WaveKey=", s and tostring(s.WaveKey) or "nil")
-			else
-				print(js, "No Join TeleportData for", player.Name)
-			end
-			local eqt = jtd and jtd.Items and jtd.Items.EquippedTemplates
-			if eqt then
-				print(js, "Teleport EquippedTemplates -> Weapon:", tostring(eqt.Weapon), "Armor:", tostring(eqt.Armor), "Ring:", tostring(eqt.Ring))
-			end
-			-- Serializado atual dos itens equipados no jogador
-			local ser = EquippedItemsModule:Serialize(player)
-			print(js, "Equipped Serialize:", ser and (ser.Weapon or "nil") , ser and (ser.Armor or "nil"), ser and (ser.Ring or "nil"))
-			-- Resolved stats tables
-			local equipStats = EquippedItemsModule:GetEquipped(player) or {}
-			local function dumpEquip(es)
-				local w = es.weapon and (es.weapon.Health or es.weapon.HealthPercent or es.weapon.BaseHealth) or nil
-				local a = es.armor and (es.armor.Health or es.armor.HealthPercent or es.armor.BaseHealth) or nil
-				local r = es.ring and (es.ring.Health or es.ring.HealthPercent or es.ring.BaseHealth) or nil
-				return w,a,r
-			end
-			local w,a,r = dumpEquip(equipStats)
-			print(js, "Resolved equip stats Health -> Weapon:", tostring(w), "Armor:", tostring(a), "Ring:", tostring(r))
-			local charsList = CharactersModule:GetEquipped(player) or {}
-			for i,c in ipairs(charsList) do
-				local ph = c and c.Passives and (c.Passives.Health or c.Passives.HealthPercent) or nil
-				print(js, string.format("Char[%d]=%s Level=%s Tier=%s PassiveHealth=%s", i, tostring(c.Name), tostring(c.Level), tostring(c.Tier), tostring(ph)))
-			end
-			-- Compute final stats via PlayerStatsModule for inspection
-			local ok, PlayerStatsModule = pcall(function() return require(ReplicatedStorage.Scripts:WaitForChild("PlayerStats")) end)
-			if ok and type(PlayerStatsModule) == "table" then
-				local final = PlayerStatsModule:Calculate(equipStats, charsList) or {}
-				print(js, "PlayerStats.Calculate Health=", tostring(final.Health))
-			end
-			-- ReplicatedStorage / wave state
-			print(js, "Replicated Storage StoryMapId=", ReplicatedStorage:GetAttribute("StoryMapId"), "StoryLevel=", ReplicatedStorage:GetAttribute("StoryLevel"), "LevelName=", ReplicatedStorage:GetAttribute("LevelName"))
-			if waveManager and type(waveManager.IsRunning) == "function" then
-				local ok, run = pcall(function() return waveManager:IsRunning() end)
-				print(js, "waveManager.IsRunning=", ok and tostring(run) or "unknown")
-			else
-				print(js, "waveManager.IsRunning=unknown (waveManager not ready)")
-			end
+				-- DEBUG: log join payload, equipped templates/stats, characters and computed Health
+				pcall(function()
+					local js = "[InitDebug]"
+					local join = player:GetJoinData()
+					local jtd = join and join.TeleportData
+					if jtd then
+						local s = jtd.Story
+						print(js, "Join TeleportData present for", player.Name, "Story=", s and tostring(s.MapId) or "nil", "Level=", s and tostring(s.Level) or "nil", "WaveKey=", s and tostring(s.WaveKey) or "nil")
+					else
+						print(js, "No Join TeleportData for", player.Name)
+					end
+					local eqt = jtd and jtd.Items and jtd.Items.EquippedTemplates
+					if eqt then
+						print(js, "Teleport EquippedTemplates -> Weapon:", tostring(eqt.Weapon), "Armor:", tostring(eqt.Armor), "Ring:", tostring(eqt.Ring))
+					end
+					-- Serializado atual dos itens equipados no jogador
+					local ser = EquippedItemsModule:Serialize(player)
+					print(js, "Equipped Serialize:", ser and (ser.Weapon or "nil") , ser and (ser.Armor or "nil"), ser and (ser.Ring or "nil"))
+					-- Resolved stats tables
+					local equipStats = EquippedItemsModule:GetEquipped(player) or {}
+					local function dumpEquip(es)
+						local w = es.weapon and (es.weapon.Health or es.weapon.HealthPercent or es.weapon.BaseHealth) or nil
+						local a = es.armor and (es.armor.Health or es.armor.HealthPercent or es.armor.BaseHealth) or nil
+						local r = es.ring and (es.ring.Health or es.ring.HealthPercent or es.ring.BaseHealth) or nil
+						return w,a,r
+					end
+					local w,a,r = dumpEquip(equipStats)
+					print(js, "Resolved equip stats Health -> Weapon:", tostring(w), "Armor:", tostring(a), "Ring:", tostring(r))
+					local charsList = CharactersModule:GetEquipped(player) or {}
+					for i,c in ipairs(charsList) do
+						local ph = c and c.Passives and (c.Passives.Health or c.Passives.HealthPercent) or nil
+						print(js, string.format("Char[%d]=%s Level=%s Tier=%s PassiveHealth=%s", i, tostring(c.Name), tostring(c.Level), tostring(c.Tier), tostring(ph)))
+					end
+					-- Compute final stats via PlayerStatsModule for inspection
+					local ok, PlayerStatsModule = pcall(function() return require(ReplicatedStorage.Scripts:WaitForChild("PlayerStats")) end)
+					if ok and type(PlayerStatsModule) == "table" then
+						local final = PlayerStatsModule:Calculate(equipStats, charsList) or {}
+						print(js, "PlayerStats.Calculate Health=", tostring(final.Health))
+					end
+					-- ReplicatedStorage / wave state
+					print(js, "Replicated Storage StoryMapId=", ReplicatedStorage:GetAttribute("StoryMapId"), "StoryLevel=", ReplicatedStorage:GetAttribute("StoryLevel"), "LevelName=", ReplicatedStorage:GetAttribute("LevelName"))
+					if waveManager and type(waveManager.IsRunning) == "function" then
+						local ok, run = pcall(function() return waveManager:IsRunning() end)
+						print(js, "waveManager.IsRunning=", ok and tostring(run) or "unknown")
+					else
+						print(js, "waveManager.IsRunning=unknown (waveManager not ready)")
+					end
 
-			-- Also fire client debug event for the joining player (if they are allowed)
-			pcall(function()
-				local ev = Remotes:FindFirstChild("DebugInit")
-				if ev and ev:IsA("RemoteEvent") then
-					local payload = {
-						StoryMapId = ReplicatedStorage:GetAttribute("StoryMapId"),
-						StoryLevel = ReplicatedStorage:GetAttribute("StoryLevel"),
-						LevelName = ReplicatedStorage:GetAttribute("LevelName"),
-						Player = player.Name,
-						EquippedSerialize = ser,
-						EquipResolved = equipStats,
-						Chars = charsList,
-						PlayerStatsHealth = (final and final.Health) or nil,
-					}
-					ev:FireClient(player, payload)
-				end
-			end)
+					-- Also fire client debug event for the joining player (if they are allowed)
+					pcall(function()
+						local ev = Remotes:FindFirstChild("DebugInit")
+						if ev and ev:IsA("RemoteEvent") then
+							local payload = {
+								StoryMapId = ReplicatedStorage:GetAttribute("StoryMapId"),
+								StoryLevel = ReplicatedStorage:GetAttribute("StoryLevel"),
+								LevelName = ReplicatedStorage:GetAttribute("LevelName"),
+								Player = player.Name,
+								EquippedSerialize = ser,
+								EquipResolved = equipStats,
+								Chars = charsList,
+								PlayerStatsHealth = (final and final.Health) or nil,
+							}
+							ev:FireClient(player, payload)
+						end
+					end)
 
-			end)
+				end)
 				d.CanQuery = true
 				d.Massless = true
 			end
@@ -1537,15 +1193,65 @@ Players.PlayerAdded:Connect(function(player)
 		end)
 	end)
 	InitializePlayer(player)
-	
-	-- [Infinite Mode] Auto-start waveManager when first player joins
+	-- Capture TeleportData story context (if present) for reward computation later
 	pcall(function()
-		local inst = ensureWaveManager()
-		if inst and type(inst.IsRunning) == "function" and not inst:IsRunning() then
-			print("[InfiniteMode] Starting WaveManager for first player...")
-			task.delay(0.5, function()
-				pcall(function() inst:Start() end)
+		local joinData = player:GetJoinData()
+		local td = joinData and joinData.TeleportData
+		if type(td) == "table" and type(td.Story) == "table" then
+			-- Cache LobbyPlaceId once if provided so ReturnToLobby can work without depending on TeleportData later
+			pcall(function()
+				local rp = tonumber(td.ReturnPlaceId)
+				if rp and rp > 0 then
+					ReplicatedStorage:SetAttribute("LobbyPlaceId", rp)
+				end
 			end)
+			local sid = tostring(td.Story.MapId or "")
+			local lvl = tonumber(td.Story.Level)
+			if sid ~= "" and lvl and lvl >= 1 then
+				ReplicatedStorage:SetAttribute("StoryMapId", sid)
+				ReplicatedStorage:SetAttribute("StoryLevel", lvl)
+				-- Set LevelName based on Level by default; if WaveKey is present, override with more specific mapping
+				local baseLevelName = "lvl" .. tostring(lvl)
+				ReplicatedStorage:SetAttribute("LevelName", baseLevelName)
+				-- If TeleportData provides a WaveKey, derive LevelName (lvl1/lvl2/lvl3)
+				local waveKey = td.Story.WaveKey
+				if type(waveKey) == "string" and waveKey ~= "" then
+					local levelName = baseLevelName
+					if string.find(waveKey, "_l1") then levelName = "lvl1"
+					elseif string.find(waveKey, "_l2") then levelName = "lvl2"
+					elseif string.find(waveKey, "_l3") then levelName = "lvl3" end
+					ReplicatedStorage:SetAttribute("LevelName", levelName)
+					print(string.format("[PlayerAdded] TeleportData WaveKey=%s -> LevelName=%s", tostring(waveKey), tostring(levelName)))
+					-- Ensure wavesConfig matches this level
+					reloadWavesConfig()
+				end
+				-- Ensure waveManager exists and runs for this server instance (start if not running)
+				pcall(function()
+					local inst = ensureWaveManager()
+					-- Update player leaderstats/replicated meta with the correct total waves before start
+					if inst and type(inst.Waves) == "table" then
+						local total = #inst.Waves
+						-- Replicated attribute TotalWaves is already set by WaveManager.new, but reinforce here
+						pcall(function() ReplicatedStorage:SetAttribute("TotalWaves", total) end)
+						for _, p in ipairs(Players:GetPlayers()) do
+							pcall(function()
+								local ls = p:FindFirstChild("leaderstats")
+								if not ls then ls = Instance.new("Folder") ls.Name = "leaderstats" ls.Parent = p end
+								local nv = ls:FindFirstChild("TotalWaves") or Instance.new("NumberValue")
+								nv.Name = "TotalWaves"
+								nv.Parent = ls
+								nv.Value = total
+							end)
+						end
+					end
+					if inst and type(inst.IsRunning) == "function" and not inst:IsRunning() then
+						print("[PlayerAdded] Starting WaveManager after TeleportData applied")
+						task.delay(0.5, function()
+							pcall(function() inst:Start() end)
+						end)
+					end
+				end)
+			end
 		end
 	end)
 	-- Ensure initial spawn happens once (revive remains manual after death)
@@ -1593,7 +1299,7 @@ end
 
 -- Hook existing players' leaderstats
 for _, plr in ipairs(Players:GetPlayers()) do
-    pcall(function() hookRunTrackToLeaderstats(plr) end)
+	pcall(function() hookRunTrackToLeaderstats(plr) end)
 end
 
 -- Cleanup: ensure periodic card loops are stopped on leave
@@ -1641,8 +1347,8 @@ Players.PlayerRemoving:Connect(function(player)
 		end
 	end)
 
-		-- Cleanup leaderstat connections
-		cleanupLeaderConns(player)
+	-- Cleanup leaderstat connections
+	cleanupLeaderConns(player)
 end)
 
 -- Derrota: todos os jogadores vivos? Monitor simples: se nenhum Player.Character com Humanoid.Health>0 enquanto waves ainda decorrem.
@@ -1656,6 +1362,8 @@ task.spawn(function()
 		if not waveManager:IsRunning() then break end
 		local anyAlive = false
 		for _, plr in ipairs(Players:GetPlayers()) do
+			-- Treat players with pending revive purchases as alive to avoid ending the run mid-purchase
+			if plr:GetAttribute("_PendingRevivePurchase") then anyAlive = true break end
 			local char = plr.Character
 			local hum = char and char:FindFirstChildOfClass("Humanoid")
 			if hum and hum.Health > 0 then anyAlive = true break end
@@ -1663,13 +1371,9 @@ task.spawn(function()
 		if anyAlive then
 			lastAliveTimestamp = os.clock()
 		else
-			if not lastAliveTimestamp then
-				lastAliveTimestamp = os.clock()
-			else
-				if os.clock() - lastAliveTimestamp >= DEFEAT_GRACE_SECONDS then
-					endRun(false)
-					break
-				end
+			if os.clock() - lastAliveTimestamp >= DEFEAT_GRACE_SECONDS then
+				endRun(false)
+				break
 			end
 		end
 	end
@@ -1756,7 +1460,170 @@ do
 	end)
 end
 
--- Revive handler removed: Infinite mode uses permanent death for leaderboard integrity
+-- Handlers DeathMenu
+-- Revive implementation extracted so ProcessReceipt can call it safely.
+local function serverDoRevive(player)
+	if runEnded then return end
+	-- Simple anti-spam (0.75s)
+	local last = player:GetAttribute("_LastReviveTime") or 0
+	if os.clock() - last < 0.75 then return end
+	player:SetAttribute("_LastReviveTime", os.clock())
+
+	local function doRespawn()
+		local ok, err = pcall(function()
+			player:LoadCharacter()
+		end)
+		if not ok then
+			warn("[Revive] LoadCharacter failed:", err)
+		end
+	end
+
+	local char = player.Character
+	local hum = char and char:FindFirstChildOfClass("Humanoid")
+	-- Snapshot current run-level & XP so we can restore if some script reinitializes
+	local stats = player:FindFirstChild("Stats")
+	local snapshotLevel, snapshotXP
+	if stats then
+		local lv = stats:FindFirstChild("Level")
+		local xp = stats:FindFirstChild("XP")
+		snapshotLevel = lv and lv.Value or nil
+		snapshotXP = xp and xp.Value or nil
+	end
+	-- Mark reviving to pause defeat logic side-effects
+	player:SetAttribute("_Reviving", true)
+	lastAliveTimestamp = os.clock() -- prevent defeat trigger window
+
+	local function onSpawn(newChar)
+		-- One-shot restore
+		player:SetAttribute("_Reviving", false)
+		-- Restart any card module loops that exited on death.
+		pcall(function() CardDispatcher.RestartLoopsForPlayer(player) end)
+		local s2 = player:FindFirstChild("Stats")
+		if s2 then
+			if snapshotLevel and s2:FindFirstChild("Level") then
+				local lv = s2.Level
+				if lv.Value ~= snapshotLevel then
+					lv.Value = snapshotLevel
+				end
+			end
+			if snapshotXP and s2:FindFirstChild("XP") then
+				local xv = s2.XP
+				xv.Value = snapshotXP
+			end
+		end
+		-- Reapply stats only (does not reset Level/XP)
+		local items = EquippedItemsModule:GetEquipped(player)
+		local charsNow = CharactersModule:GetEquipped(player)
+		pcall(function() ApplyStatsModule:Apply(player, items, charsNow) end)
+
+		-- Grant brief invincibility to the newly spawned character so the player isn't instantly damaged
+		pcall(function()
+			if newChar and newChar:IsA("Model") then
+				newChar:SetAttribute("Invulnerable", true)
+				-- Also set on the Humanoid for safety (some scripts may check Humanoid attributes)
+				local hum = newChar:FindFirstChildOfClass("Humanoid")
+				if hum then
+					pcall(function() hum:SetAttribute("Invulnerable", true) end)
+				end
+				-- Also ensure defeat monitor sees them alive for the duration
+				lastAliveTimestamp = os.clock()
+				-- Protect humanoid health during invincibility window (catch direct TakeDamage calls)
+				if hum then
+					local prevHealth = hum.Health
+					local invActive = true
+					local conn
+					conn = hum.HealthChanged:Connect(function(newHealth)
+						if not invActive then prevHealth = newHealth return end
+						if newHealth < prevHealth then
+							pcall(function() hum.Health = prevHealth end)
+						else
+							prevHealth = newHealth
+						end
+					end)
+					task.delay(REVIVE_INVINCIBILITY_SECONDS, function()
+						invActive = false
+						if conn and conn.Connected then pcall(function() conn:Disconnect() end) end
+						if newChar and newChar.Parent then
+							newChar:SetAttribute("Invulnerable", false)
+						end
+						if hum and hum.Parent then
+							pcall(function() hum:SetAttribute("Invulnerable", false) end)
+						end
+					end)
+				end
+			end
+		end)
+		-- Multi-pass restore (some scripts may late-adjust Level/XP right after spawn)
+		if snapshotLevel or snapshotXP then
+			for i=1,3 do
+				task.delay(0.25 * i, function()
+					local s3 = player:FindFirstChild("Stats")
+					if not s3 then return end
+					if snapshotLevel and s3:FindFirstChild("Level") and s3.Level.Value ~= snapshotLevel then
+						s3.Level.Value = snapshotLevel
+					end
+					if snapshotXP and s3:FindFirstChild("XP") and s3.XP.Value ~= snapshotXP then
+						s3.XP.Value = snapshotXP
+					end
+				end)
+			end
+		end
+	end
+
+	-- Ensure listener before triggering respawn
+	player.CharacterAdded:Once(onSpawn)
+
+	if (not char) or (not hum) or hum.Health <= 0 then
+		doRespawn()
+	else
+		if hum.Health <= 0 then
+			doRespawn()
+		else
+			player:SetAttribute("_Reviving", false)
+		end
+	end
+end
+
+-- DeathMenuRevive: call the shared revive function
+DeathMenuRevive.OnServerEvent:Connect(function(player)
+	serverDoRevive(player)
+end)
+
+-- Create a buy remote to prompt product purchase from client
+local DeathMenuBuyRevive = Remotes:FindFirstChild("DeathMenuBuyRevive") or Instance.new("RemoteEvent")
+DeathMenuBuyRevive.Name = "DeathMenuBuyRevive"
+DeathMenuBuyRevive.Parent = Remotes
+DeathMenuBuyRevive.OnServerEvent:Connect(function(player)
+	if runEnded then return end
+	player:SetAttribute("_PendingRevivePurchase", true)
+	lastAliveTimestamp = os.clock()
+	local ok, err = pcall(function()
+		MarketplaceService:PromptProductPurchase(player, REVIVE_PRODUCT_ID)
+	end)
+	if not ok then
+		warn("[DeathMenuBuyRevive] PromptProductPurchase failed for", player.Name, err)
+		player:SetAttribute("_PendingRevivePurchase", false)
+	end
+end)
+
+-- Attach ProcessReceipt after serverDoRevive exists so receipts can trigger immediate revives
+MarketplaceService.ProcessReceipt = function(receiptInfo)
+	if tostring(receiptInfo.ProductId) ~= tostring(REVIVE_PRODUCT_ID) then
+		return Enum.ProductPurchaseDecision.NotProcessedYet
+	end
+	local player = Players:GetPlayerByUserId(tonumber(receiptInfo.PlayerId) or 0)
+	if not player then
+		return Enum.ProductPurchaseDecision.NotProcessedYet
+	end
+	local ok, err = pcall(function() serverDoRevive(player) end)
+	if ok then
+		pcall(function() player:SetAttribute("_PendingRevivePurchase", false) end)
+		return Enum.ProductPurchaseDecision.PurchaseGranted
+	else
+		warn("[ProcessReceipt][Namek] serverDoRevive failed:", err)
+		return Enum.ProductPurchaseDecision.NotProcessedYet
+	end
+end
 
 DeathMenuRestart.OnServerEvent:Connect(function(player)
 	-- Bloquear se já venceu (WavesCompleted=true)
@@ -1818,20 +1685,6 @@ end
 -- Basic server-side card selection flow
 offerCardsToPlayer = function(player: Player)
 	if not player then return end
-	
-	-- Skip if player already has a pending offer (avoid showing multiple card UIs at once)
-	if PendingOffers[player] then
-		print(string.format("[Cards] Player %s already has pending offer, skipping", player.Name))
-		return
-	end
-	
-	-- Check if player has pending level ups
-	local pending = PendingLevelUps[player] or 0
-	if pending <= 0 then
-		print(string.format("[Cards] No pending level ups for %s", player.Name))
-		return
-	end
-	
 	-- Debug: inspect pool sources and sizes
 	local function listEquippedNames()
 		local chosen = player:FindFirstChild("ChosenChars")
@@ -1869,12 +1722,10 @@ offerCardsToPlayer = function(player: Player)
 		-- Debug: log offered ids for this player
 		local offeredIds = {}
 		for k,_ in pairs(map) do table.insert(offeredIds, k) end
-		print(string.format("[Cards][Debug] Offered to %s (%d pending levels): %s", player.Name, pending, table.concat(offeredIds, ", ")))
+		print(string.format("[Cards][Debug] Offered to %s: %s", player.Name, table.concat(offeredIds, ", ")))
 		LevelUpEvent:FireClient(player, { cards = cards })
 	else
 		warn("[Cards] No cards available to offer for", player.Name)
-		-- Se não há cartas mas há levels pendentes, decrementa mesmo assim
-		PendingLevelUps[player] = math.max(0, pending - 1)
 	end
 end
 
@@ -1900,13 +1751,6 @@ LevelUpChoice.OnServerEvent:Connect(function(player, choice)
 	-- Debug: log clearing pending offers
 	print(string.format("[Cards][Debug] Clearing pending offers for %s (chosen %s)", player.Name, id))
 	PendingOffers[player] = nil
-	
-	-- Decrement pending level ups
-	local pending = PendingLevelUps[player] or 0
-	if pending > 0 then
-		PendingLevelUps[player] = pending - 1
-		print(string.format("[Cards] %s has %d more level up(s) pending", player.Name, PendingLevelUps[player]))
-	end
 	-- Record chosen card id (unique tracking) so pool filtering works
 	local runTrack = player:FindFirstChild("RunTrack") or Instance.new("Folder")
 	runTrack.Name = "RunTrack"
@@ -1934,25 +1778,8 @@ LevelUpChoice.OnServerEvent:Connect(function(player, choice)
 		tag.Value = true
 	end
 
-	-- Determine if this card is an existing card being leveled and pass the new level
-	local runTrack = player:FindFirstChild("RunTrack") or Instance.new("Folder")
-	runTrack.Name = "RunTrack"
-	runTrack.Parent = player
-	local existingFolder = runTrack:FindFirstChild(chosenMeta.id)
-	local currentLevelParam = nil
-	if existingFolder then
-		local lvlNV = existingFolder:FindFirstChild("Level")
-		if lvlNV and lvlNV:IsA("IntValue") then
-			-- intent: when choosing a card that already exists, apply as level-up to (existing + 1)
-			currentLevelParam = lvlNV.Value + 1
-		end
-	end
-	-- Apply the chosen card effects (pass currentLevel when leveling existing card)
-	if currentLevelParam then
-		CardDispatcher.ApplyCard(player, chosenMeta, currentLevelParam)
-	else
-		CardDispatcher.ApplyCard(player, chosenMeta)
-	end
+	-- Apply the chosen card effects
+	CardDispatcher.ApplyCard(player, chosenMeta)
 
 	-- Reaplicar stats após aplicar carta (caso aumente Health / HealthPercent etc.)
 	local items = EquippedItemsModule:GetEquipped(player)
@@ -1965,15 +1792,6 @@ LevelUpChoice.OnServerEvent:Connect(function(player, choice)
 		local chars2 = CharactersModule:GetEquipped(player)
 		pcall(function() ApplyStatsModule:Apply(player, items2, chars2) end)
 	end)
-	
-	-- Check if there are more pending level ups and offer next card
-	if (PendingLevelUps[player] or 0) > 0 then
-		task.delay(0.5, function()
-			if player and player:IsDescendantOf(game.Players) then
-				offerCardsToPlayer(player)
-			end
-		end)
-	end
 end)
 
 -- Allow a single player to exit early and receive accumulated XP (no bonus/rewards)
@@ -2315,34 +2133,6 @@ buildAggregatedRunResult = function(plr)
 			end
 		end
 	end
-	
-	-- 3.6) INFINITE MODE: Add infinite mode data
-	pcall(function()
-		local currentWave = tonumber(ReplicatedStorage:GetAttribute("CurrentWave")) or 0
-		if currentWave > 0 then
-			result.Infinite = result.Infinite or {}
-			result.Infinite.HighestWave = currentWave
-			
-			-- Get milestones reached from player attribute
-			local milestonesStr = plr:GetAttribute("InfiniteMilestonesReached") or ""
-			if milestonesStr ~= "" then
-				local milestones = {}
-				for num in string.gmatch(milestonesStr, "%d+") do
-					table.insert(milestones, tonumber(num))
-				end
-				result.Infinite.MilestonesReached = milestones
-			end
-		end
-	end)
-
-	-- 4) Add TotalDamage from RunTrack for missions tracking
-	local runTrack = plr:FindFirstChild("RunTrack")
-	if runTrack then
-		local dmgVal = runTrack:FindFirstChild("Damage")
-		if dmgVal and (dmgVal:IsA("NumberValue") or dmgVal:IsA("IntValue")) then
-			result.TotalDamage = tonumber(dmgVal.Value) or 0
-		end
-	end
 
 	-- Normalize empty maps to nil (guard when CharacterXP is nil)
 	if type(result.CharacterXP) == "table" then
@@ -2432,12 +2222,344 @@ RunReturnToLobbyRE.OnServerEvent:Connect(function(player)
 end)
 
 -- =============================
--- Next Level removed: Infinite mode is endless, no level progression
+-- Post-run choice: go to next level/map
 -- =============================
+local RunNextLevelRE = Remotes:FindFirstChild("RunNextLevel") or Instance.new("RemoteEvent")
+RunNextLevelRE.Name = "RunNextLevel"
+RunNextLevelRE.Parent = Remotes
+-- Feedback event for client to surface success/failure messages when requesting next level
+local RunNextLevelResult = Remotes:FindFirstChild("RunNextLevelResult") or Instance.new("RemoteEvent")
+RunNextLevelResult.Name = "RunNextLevelResult"
+RunNextLevelResult.Parent = Remotes
 
--- =============================
--- Next Level removed: Infinite mode is endless, no level progression
--- =============================
+-- DevSetStoryLevel removed per request
+
+local function getAllStoryMaps()
+	local maps = {}
+	local RS = game:GetService("ReplicatedStorage")
+	local Shared = RS:FindFirstChild("Shared")
+	local Maps = Shared and Shared:FindFirstChild("Maps")
+	local Story = Maps and Maps:FindFirstChild("Story")
+	if not Story then return maps end
+	for _, folder in ipairs(Story:GetChildren()) do
+		if folder:IsA("Folder") then
+			local mod = folder:FindFirstChild("Map")
+			if mod and mod:IsA("ModuleScript") then
+				local ok, mapTbl = pcall(function() return require(mod) end)
+				if ok and type(mapTbl) == "table" and mapTbl.Id and type(mapTbl.Levels) == "table" then
+					table.insert(maps, mapTbl)
+				end
+			end
+		end
+	end
+	table.sort(maps, function(a,b)
+		local sa = tonumber(a.SortOrder) or math.huge
+		local sb = tonumber(b.SortOrder) or math.huge
+		if sa ~= sb then return sa < sb end
+		return tostring(a.Id) < tostring(b.Id)
+	end)
+	return maps
+end
+
+local function computeNextTarget()
+	local currentMapId = ReplicatedStorage:GetAttribute("StoryMapId")
+	local currentLevel = tonumber(ReplicatedStorage:GetAttribute("StoryLevel")) or 1
+	print(string.format("[computeNextTarget] StoryMapId=%s StoryLevel=%s", tostring(currentMapId), tostring(currentLevel)))
+	local mapsDebug = getAllStoryMaps()
+	local ids = {}
+	for _, m in ipairs(mapsDebug) do
+		table.insert(ids, tostring(m.Id))
+		-- dump levels summary for each map
+		local lvlCount = (type(m.Levels) == "table") and #m.Levels or 0
+		local sample = ""
+		if type(m.Levels) == "table" then
+			for idx = 1, math.min(3, #m.Levels) do
+				local entry = m.Levels[idx]
+				sample = sample .. (entry and entry.WaveKey and tostring(entry.WaveKey) or tostring(entry) ) .. ";"
+			end
+		end
+		print(string.format("[computeNextTarget] Map Id=%s | Levels=%d | SampleLevels=%s", tostring(m.Id), lvlCount, sample))
+	end
+	print("[computeNextTarget] available story map ids:", table.concat(ids, ", "))
+	-- If no StoryMapId set, and we're running in Studio, auto-select the first map so Next Level can be tested immediately
+	if (not currentMapId or currentMapId == "") and RunService:IsStudio() and #mapsDebug > 0 then
+		local first = mapsDebug[1]
+		pcall(function()
+			ReplicatedStorage:SetAttribute("StoryMapId", tostring(first.Id))
+			ReplicatedStorage:SetAttribute("StoryLevel", 1)
+		end)
+		print(string.format("[computeNextTarget][DevStudio] Auto-set StoryMapId=%s StoryLevel=1", tostring(first.Id)))
+		currentMapId = ReplicatedStorage:GetAttribute("StoryMapId")
+	end
+	if not currentMapId or currentMapId == "" then return nil end
+	local maps = getAllStoryMaps()
+	local mapIndex
+	for i, m in ipairs(maps) do
+		if tostring(m.Id) == tostring(currentMapId) then mapIndex = i break end
+	end
+	if not mapIndex then
+		print("[computeNextTarget] current StoryMapId not found in available maps")
+		return nil
+	end
+	local curMap = maps[mapIndex]
+	local maxLevel = #curMap.Levels
+	if currentLevel < maxLevel then
+		return { type = "level", map = curMap, level = currentLevel + 1 }
+	end
+	-- move to next map if exists
+	local nextMap = maps[mapIndex + 1]
+	if nextMap then
+		return { type = "map", map = nextMap, level = 1 }
+	end
+	return { type = "lobby" }
+end
+
+-- Studio helper: if running in Studio and no StoryMapId is set (JoinData not present),
+-- auto-select the first available story map so "Next Level" can be tested in Studio.
+if RunService:IsStudio() then
+	task.spawn(function()
+		task.wait(0.5)
+		local sid = ReplicatedStorage:GetAttribute("StoryMapId")
+		if not sid or sid == "" then
+			local maps = getAllStoryMaps()
+			if maps and #maps > 0 then
+				local first = maps[1]
+				ReplicatedStorage:SetAttribute("StoryMapId", tostring(first.Id))
+				ReplicatedStorage:SetAttribute("StoryLevel", 1)
+				print(string.format("[DevStudio] Auto-set StoryMapId=%s StoryLevel=1 for Studio testing", tostring(first.Id)))
+				-- Ensure LevelName defaults to lvl1 in Studio so waves can start without TeleportData
+				if not ReplicatedStorage:GetAttribute("LevelName") then
+					ReplicatedStorage:SetAttribute("LevelName", "lvl1")
+				end
+				-- Reload waves config and start WaveManager if not running (Studio quick play)
+				reloadWavesConfig()
+				local inst = ensureWaveManager()
+				if inst then
+					-- Surface total waves to UI/leaderstats
+					local total = (type(inst.Waves) == "table") and #inst.Waves or 0
+					pcall(function() ReplicatedStorage:SetAttribute("TotalWaves", total) end)
+					for _, p in ipairs(Players:GetPlayers()) do
+						pcall(function()
+							local ls = p:FindFirstChild("leaderstats")
+							if not ls then ls = Instance.new("Folder") ls.Name = "leaderstats" ls.Parent = p end
+							local nv = ls:FindFirstChild("TotalWaves") or Instance.new("NumberValue")
+							nv.Name = "TotalWaves"
+							nv.Parent = ls
+							nv.Value = total
+						end)
+					end
+					if type(inst.IsRunning) == "function" then
+						local ok, running = pcall(function() return inst:IsRunning() end)
+						if not ok or not running then
+							task.delay(0.25, function()
+								pcall(function() inst:Start() end)
+							end)
+						end
+					else
+						task.delay(0.25, function()
+							pcall(function() inst:Start() end)
+						end)
+					end
+				end
+			end
+		end
+	end)
+end
+
+RunNextLevelRE.OnServerEvent:Connect(function(player)
+	print(string.format("[RunNextLevel] request from %s (runEnded=%s)", tostring(player and player.Name), tostring(runEnded)))
+	if not runEnded then
+		print("[RunNextLevel] rejected: run not ended")
+		pcall(function()
+			local ev = Remotes:FindFirstChild("RunNextLevelResult")
+			if ev and ev:IsA("RemoteEvent") then
+				ev:FireClient(player, { success = false, reason = "run_not_ended", message = "Run ainda não terminou." })
+			end
+		end)
+		return
+	end
+	-- First, aggregate last run like Play Again does
+	do
+		local ra = player:FindFirstChild("RunAccum")
+		local lastJson = ra and ra:FindFirstChild("LastRunResultJSON")
+		if lastJson and lastJson.Value ~= "" then
+			local ok, last = pcall(function() return HttpService:JSONDecode(lastJson.Value) end)
+			if ok and type(last) == "table" then addToPending(player, last) end
+			lastJson.Value = "" -- consumed
+		end
+		player:SetAttribute("AwaitingRunChoice", false)
+	end
+	local nextTarget = computeNextTarget()
+	if not nextTarget then
+		print("[RunNextLevel] no next target found from ReplicatedStorage attribute; attempting fallback from player's last run result")
+		-- Fallback: try to infer current map from player's last run result (RunAccum.LastRunResultJSON)
+		local ra = player:FindFirstChild("RunAccum")
+		local lastJson = ra and ra:FindFirstChild("LastRunResultJSON")
+		local inferred = nil
+		if lastJson and lastJson.Value and lastJson.Value ~= "" then
+			local ok, parsed = pcall(function() return HttpService:JSONDecode(lastJson.Value) end)
+			if ok and type(parsed) == "table" and parsed.Story and parsed.Story.MapId then
+				inferred = { mapId = tostring(parsed.Story.MapId), level = tonumber(parsed.Story.Level) or 1 }
+				print("[RunNextLevel] inferred map from LastRunResultJSON:", inferred.mapId, inferred.level)
+			end
+		end
+		-- If still not inferred, try join teleport data (useful in Studio / direct starts)
+		if not inferred then
+			local ok, jd = pcall(function() return player:GetJoinData() end)
+			local td = ok and jd and jd.TeleportData or nil
+			if td and type(td) == "table" and td.Story and td.Story.MapId then
+				inferred = { mapId = tostring(td.Story.MapId), level = tonumber(td.Story.Level) or 1 }
+				print("[RunNextLevel] inferred map from JoinData.TeleportData:", inferred.mapId, inferred.level)
+			end
+		end
+		if inferred then
+			-- Build candidate next target based on inferred map
+			local maps = getAllStoryMaps()
+			local mapIndex
+			for i, m in ipairs(maps) do if tostring(m.Id) == tostring(inferred.mapId) then mapIndex = i break end end
+			if mapIndex then
+				local curMap = maps[mapIndex]
+				local maxLevel = #curMap.Levels
+				local curLvl = inferred.level or 1
+				if curLvl < maxLevel then
+					nextTarget = { type = "level", map = curMap, level = curLvl + 1 }
+				else
+					local nextMap = maps[mapIndex + 1]
+					if nextMap then nextTarget = { type = "map", map = nextMap, level = 1 } end
+				end
+			end
+		end
+		if not nextTarget then
+			print("[RunNextLevel] fallback failed; no next target available")
+			pcall(function()
+				local ev = Remotes:FindFirstChild("RunNextLevelResult")
+				if ev and ev:IsA("RemoteEvent") then
+					ev:FireClient(player, { success = false, reason = "no_next_target", message = "Próximo nível não encontrado." })
+				end
+			end)
+			return
+		end
+	end
+	if nextTarget.type == "lobby" then
+		-- No more content; behave like ReturnToLobby
+		local aggregated = buildAggregatedRunResult(player)
+		local returnPlaceId
+		pcall(function()
+			local joinData = player:GetJoinData()
+			local td = joinData and joinData.TeleportData
+			returnPlaceId = td and tonumber(td.ReturnPlaceId) or nil
+		end)
+
+		if returnPlaceId and returnPlaceId > 0 then
+			local ok, err = pcall(function()
+				return saveThenTeleportToReturnPlace(returnPlaceId, player, aggregated)
+			end)
+			if not ok or not err then
+				warn("[RunNextLevel] saveThenTeleportToReturnPlace failed:", err)
+			end
+			clearPending(player)
+			print("[RunNextLevel] teleport to returnPlaceId initiated for", player.Name)
+
+			-- Send feedback to client about teleport attempt
+			pcall(function()
+				local ev = Remotes:FindFirstChild("RunNextLevelResult")
+				if ev and ev:IsA("RemoteEvent") then
+					if ok then
+						ev:FireClient(player, { success = true, message = "A teleportar para o lobby..." })
+					else
+						ev:FireClient(player, { success = false, reason = "teleport_failed", message = "Falha ao teleportar: "..tostring(err) })
+					end
+				end
+			end)
+		else
+			warn("[RunNextLevel] No ReturnPlaceId for", player.Name)
+		end
+
+		return
+	end
+
+	-- If next map is in a different place, teleport there carrying Story + ReturnPlaceId
+	local nextPlaceId = tonumber(nextTarget.map.PlaceId)
+	local currentPlaceId = tonumber(game.PlaceId)
+	if nextPlaceId and nextPlaceId > 0 and nextPlaceId ~= currentPlaceId then
+		local joinReturn
+		pcall(function()
+			local jd = player:GetJoinData()
+			local td = jd and jd.TeleportData
+			joinReturn = td and td.ReturnPlaceId or nil
+		end)
+		local options = Instance.new("TeleportOptions")
+		local td = { Story = { MapId = tostring(nextTarget.map.Id), Level = tonumber(nextTarget.level) } }
+		if joinReturn then td.ReturnPlaceId = joinReturn end
+		-- Carry PendingTotals across server boundary
+		local pending = serializePendingTotals(player)
+		if pending then td.PendingTotals = pending end
+		pcall(function() options:SetTeleportData(td) end)
+		clearPending(player) -- pending is now serialized in TeleportData
+		local ok, err = pcall(function()
+			TeleportService:TeleportAsync(nextPlaceId, { player }, options)
+		end)
+		if ok then
+			print("[RunNextLevel] teleport to nextPlaceId initiated for", player.Name)
+		else
+			warn("[RunNextLevel] teleport failed:", tostring(err))
+		end
+		pcall(function()
+			local ev = Remotes:FindFirstChild("RunNextLevelResult")
+			if ev and ev:IsA("RemoteEvent") then
+				if ok then
+					ev:FireClient(player, { success = true, message = "A teleportar para o próximo Place..." })
+				else
+					ev:FireClient(player, { success = false, reason = "teleport_failed", message = "Falha ao teleportar: "..tostring(err) })
+				end
+			end
+		end)
+		return
+	end
+
+	-- We are staying in this gameplay place; set attributes and restart
+	local chosenLevelName = "lvl" .. tostring(nextTarget.level)
+	print(string.format("[RunNextLevel] nextTarget.type=%s mapId=%s level=%s chosenLevelName=%s", tostring(nextTarget.type), tostring(nextTarget.map and nextTarget.map.Id), tostring(nextTarget.level), tostring(chosenLevelName)))
+	ReplicatedStorage:SetAttribute("StoryMapId", tostring(nextTarget.map.Id))
+	ReplicatedStorage:SetAttribute("StoryLevel", tonumber(nextTarget.level))
+	print(string.format("[RunNextLevel] set StoryMapId=%s StoryLevel=%s", tostring(nextTarget.map.Id), tostring(nextTarget.level)))
+
+	-- Optionally also adjust LevelName used by WaveManager if maps->levels are linked to our lvl1/2/3 wave keys
+	-- Map.Levels entries often carry WaveKey; if present, derive LevelName from it, else fall back to lvl1/2/3
+	local levelName = "lvl"..tostring(nextTarget.level)
+	local waveKey = nextTarget.map.Levels[nextTarget.level] and nextTarget.map.Levels[nextTarget.level].WaveKey
+	if type(waveKey) == "string" and waveKey ~= "" then
+		-- Expect our WaveManager to interpret LevelName matching lvl1/lvl2/lvl3; keep simple mapping here
+		-- If you later add a wave registry keyed by WaveKey, update WaveManager accordingly.
+		if string.find(waveKey, "_l1") then levelName = "lvl1"
+		elseif string.find(waveKey, "_l2") then levelName = "lvl2"
+		elseif string.find(waveKey, "_l3") then levelName = "lvl3" end
+	end
+	ReplicatedStorage:SetAttribute("LevelName", levelName)
+
+	-- Restart fresh (force to bypass WavesCompleted guard for next-level flow)
+	print(string.format("[RunNextLevel] attempting to teleport to a fresh private server for LevelName=%s", tostring(levelName)))
+	-- Try reserving a private server for a clean run instance on the same PlaceId
+	local currentPlace = tonumber(game.PlaceId)
+	local td = { Story = { MapId = tostring(nextTarget.map.Id), Level = tonumber(nextTarget.level) } }
+	local ok, err = teleportToReservedServer(currentPlace, { player }, td)
+	if not ok then
+		print("[RunNextLevel] teleport reserved server failed:", tostring(err))
+		local ev = Remotes:FindFirstChild("RunNextLevelResult")
+		if ev and ev:IsA("RemoteEvent") then
+			ev:FireClient(player, { success = false, reason = "teleport_failed", message = "Não foi possível criar servidor privado para o próximo nível. Tenta novamente." })
+		end
+	else
+		print("[RunNextLevel] teleport to reserved server initiated for", player.Name)
+	end
+	print("[RunNextLevel] restarted run for next level")
+	pcall(function()
+		local ev = Remotes:FindFirstChild("RunNextLevelResult")
+		if ev and ev:IsA("RemoteEvent") then
+			ev:FireClient(player, { success = true, message = "Próximo nível carregado." })
+		end
+	end)
+end)
 
 -- Fallback: if no choice is made within 20s after endRun, auto-teleport back with aggregated result
 task.spawn(function()
@@ -2466,4 +2588,3 @@ end)
 -- Hook to Leveling: when levels are gained, offer cards (for now call manually on AddXP response)
 -- You can integrate this into Leveling:AddXP returns >0
 -- Example (already printed on level up): in OnEnemyDied, after gained>0, call offerCardsToPlayer(killer)
-

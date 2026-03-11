@@ -341,7 +341,7 @@ local function openSummonUI()
             local n = tonumber(stars) or 0
             local isRare = n >= 5
                 or (type(stars) == "string" and stars:lower():match("legend") ~= nil)
-            local id = isRare and 9045122943 or 109727714379123
+            local id = isRare and 87437544236708 or 87437544236708
             playSummonSFX(id)
         end)
         local previewFrameCurrent = frame:FindFirstChild("Preview")
@@ -995,4 +995,45 @@ if summonFrame then
     end
 else
     warn("[SummonUI] Frame.Summon não encontrado.")
+end
+
+-- ── Gem Shop: ligar botões aos Developer Products ────────────────────────────
+local MPS = game:GetService("MarketplaceService")
+
+-- Mapa sku -> productId (deve coincidir com DevProducts.server.lua)
+local GEM_PRODUCTS = {
+    gems_25   = 3550675126,
+    gems_100  = 3550675228,
+    gems_200  = 3550675310,
+    gems_400  = 3550675468,
+    gems_800  = 3550675595,
+    gems_1600 = 3550675697,
+}
+
+local gemShop = frame:FindFirstChild("Gem_Shop")
+if gemShop then
+    local scrollFrame = gemShop:FindFirstChild("ScrollingFrame")
+    if scrollFrame then
+        for sku, productId in pairs(GEM_PRODUCTS) do
+            local packFrame = scrollFrame:FindFirstChild(sku)
+            if packFrame then
+                local btn = packFrame:FindFirstChildWhichIsA("ImageButton")
+                    or packFrame:FindFirstChildWhichIsA("TextButton")
+                if btn then
+                    btn.MouseButton1Click:Connect(function()
+                        MPS:PromptProductPurchase(player, productId)
+                    end)
+                    print(string.format("[GemShop] Botão %s ligado ao produto %d", sku, productId))
+                else
+                    warn("[GemShop] Botão não encontrado em", sku)
+                end
+            else
+                warn("[GemShop] Frame não encontrado:", sku)
+            end
+        end
+    else
+        warn("[GemShop] ScrollingFrame não encontrada em Gem_Shop")
+    end
+else
+    warn("[GemShop] Gem_Shop não encontrado no Frame principal")
 end

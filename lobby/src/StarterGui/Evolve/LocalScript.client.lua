@@ -430,10 +430,21 @@ end
 local function setUpgradeCost(mainIdInner, templateInner)
 	local yup = frame2:FindFirstChild("yup")
 	if not yup then return end
-	local upgrade = yup:FindFirstChild("Upgrade")
-	if not upgrade then return end
+	-- UI may use folder named 'Upgrade' or 'Evo' depending on prefab; accept both
+	local upgrade = yup:FindFirstChild("Upgrade") or yup:FindFirstChild("Evo") or findDescendantByName(yup, "Upgrade") or findDescendantByName(yup, "Evo")
+	if not upgrade then
+		warn("[EvolveUI] could not find Upgrade/Evo container under yup")
+		return
+	end
 	local top = upgrade:FindFirstChild("Top") or findDescendantByName(upgrade, "Top")
-	local costLabel = top and (top:FindFirstChild("TextLabel") or findDescendantByName(top, "TextLabel"))
+	if not top then
+		warn("[EvolveUI] could not find Top under Upgrade/Evo")
+		return
+	end
+	local costLabel = top:FindFirstChild("TextLabel") or findDescendantByName(top, "TextLabel")
+	if not costLabel then
+		warn("[EvolveUI] could not find TextLabel under Top to display cost")
+	end
 
 	-- try to infer template from inventory if missing
 	if (not templateInner or templateInner == "") and mainIdInner and GetCharacterInventoryRF then
@@ -474,9 +485,26 @@ local function setUpgradeCost(mainIdInner, templateInner)
 						if evolveModule and evolveModule:IsA("ModuleScript") then
 							local ok, evo = pcall(require, evolveModule)
 							if ok and evo and evo.cost then
-								if type(evo.cost) == "table" then
-									costValue = evo.cost.Gold or evo.cost["Gold"]
+								-- Accept multiple cost formats; prefer numeric Gold field
+								local function parseCostField(v)
+									if v == nil then return nil end
+									if type(v) == "number" then return v end
+									if type(v) == "string" then
+										-- remove commas and whitespace
+										local cleaned = v:gsub(",", ""):gsub("%s+", "")
+										local n = tonumber(cleaned)
+										return n
+									end
+									return nil
 								end
+								if type(evo.cost) == "table" then
+									costValue = parseCostField(evo.cost.Gold) or parseCostField(evo.cost.GOLD) or parseCostField(evo.cost.gold) or parseCostField(evo.cost.Coins) or parseCostField(evo.cost.coins)
+								elseif type(evo.cost) == "number" then
+									costValue = evo.cost
+								elseif type(evo.cost) == "string" then
+									costValue = parseCostField(evo.cost)
+								end
+								pcall(function() print(string.format("[EvolveUI][DEBUG] Evolve module cost raw=%s parsed=%s for template=%s", tostring(evo.cost), tostring(costValue), tostring(templateInner))) end)
 							end
 						end
 					end
@@ -487,6 +515,7 @@ local function setUpgradeCost(mainIdInner, templateInner)
 
 	if costLabel then
 		if costValue and tonumber(costValue) then
+			-- Display only the formatted numeric value (no prefix)
 			costLabel.Text = formatWithCommas(costValue)
 			pcall(function() print("[EvolveUI][DEBUG] setUpgradeCost applied ->", tostring(costLabel.Text)) end)
 		else

@@ -382,59 +382,69 @@ StoryLevelCompletedRE.OnServerEvent:Connect(function(player, mapId, level)
 end)
 
 -- Helper: find a Story map module by Id and return the table
-local function loadStoryMapById(targetId)
+-- Returns (map, isInfinite) — searches Story first, then Infinite folder
+local function loadAnyMapById(targetId)
 	local RS = game:GetService("ReplicatedStorage")
 	local Shared = RS:FindFirstChild("Shared")
-	if not Shared then return nil end
+	if not Shared then return nil, false end
 	local Maps = Shared:FindFirstChild("Maps")
-	if not Maps then return nil end
-	local Story = Maps:FindFirstChild("Story")
-	if not Story then return nil end
-	for _, folder in ipairs(Story:GetChildren()) do
-		if folder:IsA("Folder") then
-			local mod = folder:FindFirstChild("Map")
-			if mod and mod:IsA("ModuleScript") then
-				local ok, map = pcall(function() return require(mod) end)
-				if ok and type(map) == "table" then
-					local id = tostring(map.Id or map.DisplayName or "")
-					if id == tostring(targetId) then
-						return map
+	if not Maps then return nil, false end
+	for _, folderName in ipairs({ "Story", "Infinite" }) do
+		local modeFolder = Maps:FindFirstChild(folderName)
+		if modeFolder then
+			for _, folder in ipairs(modeFolder:GetChildren()) do
+				if folder:IsA("Folder") then
+					local mod = folder:FindFirstChild("Map")
+					if mod and mod:IsA("ModuleScript") then
+						local ok, map = pcall(function() return require(mod) end)
+						if ok and type(map) == "table" then
+							local id = tostring(map.Id or map.DisplayName or "")
+							if id == tostring(targetId) then
+								return map, (folderName == "Infinite")
+							end
+						end
 					end
 				end
 			end
 		end
 	end
-	return nil
+	return nil, false
 end
+-- keep old name as alias for any other callers
+local function loadStoryMapById(targetId) local m = loadAnyMapById(targetId) return m end
 
 -- Handle client Play -> teleport to the correct place with story payload
 StartStoryRunRE.OnServerEvent:Connect(function(player, mapId, level)
 	mapId = tostring(mapId or "")
 	level = tonumber(level) or 0
-	if mapId == "" or level < 1 or level > 3 then
+	if mapId == "" or level < 1 then
 		warn("[StartStoryRun] bad args from", player.Name, mapId, level)
 		return
 	end
 
-	local okSnap, snapshot = pcall(function()
-		return ProfileService:GetStorySnapshot(player)
-	end)
-	if not okSnap or type(snapshot) ~= "table" then
-		warn("[StartStoryRun] snapshot fail for", player.Name)
-		return
-	end
-	local entry = snapshot.Maps and snapshot.Maps[mapId]
-	local maxU = entry and tonumber(entry.MaxUnlockedLevel) or 0
-	if maxU < level then
-		warn("[StartStoryRun] level locked for", player.Name, mapId, level)
-		return
-	end
-
-	local mapTbl = loadStoryMapById(mapId)
+	local mapTbl, isInfinite = loadAnyMapById(mapId)
 	if not mapTbl then
 		warn("[StartStoryRun] map not found:", mapId)
 		return
 	end
+
+	-- Only enforce story unlock check for Story-mode maps
+	if not isInfinite then
+		local okSnap, snapshot = pcall(function()
+			return ProfileService:GetStorySnapshot(player)
+		end)
+		if not okSnap or type(snapshot) ~= "table" then
+			warn("[StartStoryRun] snapshot fail for", player.Name)
+			return
+		end
+		local entry = snapshot.Maps and snapshot.Maps[mapId]
+		local maxU = entry and tonumber(entry.MaxUnlockedLevel) or 0
+		if maxU < level then
+			warn("[StartStoryRun] level locked for", player.Name, mapId, level)
+			return
+		end
+	end
+
 	local placeId = tonumber(mapTbl.PlaceId) or 0
 	local lvl = mapTbl.Levels and mapTbl.Levels[level]
 	local waveKey = lvl and lvl.WaveKey or nil
@@ -455,17 +465,12 @@ StartStoryRunRE.OnServerEvent:Connect(function(player, mapId, level)
 		MapId = mapId,
 		Level = level,
 		WaveKey = waveKey,
+		IsInfinite = isInfinite,
 	}
 	-- Provide a return place id so the run place can teleport the player back to the lobby with results
 	payload.ReturnPlaceId = game.PlaceId
 	payload.Account = payload.Account or {}
 	payload.Account.Boosts = payload.Account.Boosts or (ProfileService:Get(player).Account and ProfileService:Get(player).Account.Boosts) or nil
-
-	local options = Instance.new("TeleportOptions")
-	-- Set TeleportData for the destination place
-	pcall(function()
-		options:SetTeleportData(payload)
-	end)
 
 	-- Persist profile just before teleport to avoid progress loss on place switch
 	local savedOk, saveErr = ProfileService:Save(player)
@@ -473,13 +478,33 @@ StartStoryRunRE.OnServerEvent:Connect(function(player, mapId, level)
 		warn("[StartStoryRun] Save before teleport failed:", saveErr)
 	end
 
+	-- Each run gets its own reserved (private) server so players never share instances.
+	-- In Studio, ReserveServer is unreliable — fall back to TeleportAsync for local testing.
+	local _robloxRunService = game:GetService("RunService")
+	if _robloxRunService:IsStudio() then
+		local options = Instance.new("TeleportOptions")
+		pcall(function() options:SetTeleportData(payload) end)
+		local ok, terr = pcall(function()
+			return TeleportService:TeleportAsync(placeId, { player }, options)
+		end)
+		if not ok then warn("[StartStoryRun] Studio teleport failed:", terr) end
+		return
+	end
+
+	local okR, reserved = pcall(function()
+		return TeleportService:ReserveServer(placeId)
+	end)
+	if not okR or not reserved then
+		warn("[StartStoryRun] ReserveServer failed:", reserved)
+		return
+	end
 	local ok, terr = pcall(function()
-		return TeleportService:TeleportAsync(placeId, { player }, options)
+		TeleportService:TeleportToPrivateServer(placeId, reserved, { player }, nil, payload)
 	end)
 	if not ok then
-		warn("[StartStoryRun] Teleport failed:", terr)
+		warn("[StartStoryRun] TeleportToPrivateServer failed:", terr)
 	else
-		print(string.format("[StartStoryRun] Teleporting %s -> %s L%d (place=%d)", player.Name, mapId, level, placeId))
+		print(string.format("[StartStoryRun] Reserved server: %s -> %s L%d (place=%d)", player.Name, mapId, level, placeId))
 	end
 end)
 
@@ -767,142 +792,142 @@ SellItemRE.OnServerEvent:Connect(function(player, instanceId)
 		profile = ProfileService:Get(player)
 		if not profile then return end
 
-	-- Helper to find item in Categories.List or legacy Owned
-	local function findItem()
-		if profile.Items and profile.Items.Categories then
-			for catName, catData in pairs(profile.Items.Categories) do
-				if type(catData) == "table" and type(catData.List) == "table" then
-					for idx, entry in ipairs(catData.List) do
-						if entry and entry.Id == instanceId then
-							return entry, catName, idx
+		-- Helper to find item in Categories.List or legacy Owned
+		local function findItem()
+			if profile.Items and profile.Items.Categories then
+				for catName, catData in pairs(profile.Items.Categories) do
+					if type(catData) == "table" and type(catData.List) == "table" then
+						for idx, entry in ipairs(catData.List) do
+							if entry and entry.Id == instanceId then
+								return entry, catName, idx
+							end
 						end
 					end
 				end
 			end
-		end
-		if profile.Items and profile.Items.Owned then
-			for grpName, grp in pairs(profile.Items.Owned) do
-				if type(grp) == "table" then
-					if grp.Instances then
-						for id, inst in pairs(grp.Instances) do
-							if id == instanceId then return inst, grpName, id end
-						end
-					else
-						for id, inst in pairs(grp) do
-							if id == instanceId then return inst, grpName, id end
+			if profile.Items and profile.Items.Owned then
+				for grpName, grp in pairs(profile.Items.Owned) do
+					if type(grp) == "table" then
+						if grp.Instances then
+							for id, inst in pairs(grp.Instances) do
+								if id == instanceId then return inst, grpName, id end
+							end
+						else
+							for id, inst in pairs(grp) do
+								if id == instanceId then return inst, grpName, id end
+							end
 						end
 					end
 				end
 			end
+			return nil
 		end
-		return nil
-	end
 
-	local item, groupName, key = findItem()
-	if not item then
-		ProfileUpdatedRE:FireClient(player, { msg = { type = "sell_fail", reason = "NotFound", id = instanceId } })
-		return
-	end
-
-	-- Prevent selling equipped items
-	if (item.Equipped == true) or (item.data and item.data.Equipped == true) then
-		ProfileUpdatedRE:FireClient(player, { msg = { type = "sell_fail", reason = "Equipped", id = instanceId } })
-		return
-	end
-
-	-- Determine rarity from item stats/catalog (use stars) instead of Quality
-	local function resolveStarsForItem(entry)
-		-- 1) If the item already has a Catalog.stars field (enriched snapshot), use it
-		if entry.Catalog and entry.Catalog.stars then
-			return entry.Catalog.stars
-		end
-		-- 2) Try to resolve via CharacterCatalog (by template name)
-		local template = entry.Template or (entry.data and entry.data.Template) or entry.Id
-		local starsFromTemplate = nil
-		if template then
-			local RS = game:GetService("ReplicatedStorage")
-			local Scripts = RS:FindFirstChild("Scripts")
-			local okCat, CharacterCatalog = pcall(function()
-				return require(Scripts:FindFirstChild("CharacterCatalog"))
-			end)
-			if okCat and CharacterCatalog and CharacterCatalog.Get then
-				local catEntry = CharacterCatalog:Get(template)
-				if catEntry and catEntry.stars then
-					starsFromTemplate = catEntry.stars
-				end
-			end
-			-- 3) Fallback: parse suffix like _5 from template names
-			if not starsFromTemplate then
-				local suffix = template:match("_(%d+)$")
-				if suffix then starsFromTemplate = tonumber(suffix) end
-			end
-		end
-		return starsFromTemplate or 1
-	end
-
-	local function starsToRarity(s)
-		s = tonumber(s) or 1
-		if s <= 1 then return "comum" end
-		if s == 2 then return "raro" end
-		if s == 3 then return "epico" end
-		return "lendario"
-	end
-
-	local stars = resolveStarsForItem(item)
-	if type(stars) ~= "number" or stars < 1 then stars = 1 end
-	if stars > 6 then stars = 6 end
-	local rarity = starsToRarity(stars)
-
-	-- Fixed price mapping requested by user
-	local priceByRarity = {
-		comum = 100,
-		raro = 500,
-		epico = 1000,
-		lendario = 2500,
-	}
-	local coins = priceByRarity[rarity] or priceByRarity["comum"]
-
-	-- Attempt to persist an audit entry BEFORE mutating the profile
-	if SaleAudit then
-		local templateName = item.Template or (item.data and item.data.Template) or item.Id
-		local entry = {
-			type = "item",
-			instanceId = instanceId,
-			template = templateName,
-			rarity = rarity,
-			stars = stars,
-			coins = coins,
-		}
-		local id, aerr = SaleAudit:LogSale(player.UserId, entry)
-		if not id then
-			ProfileUpdatedRE:FireClient(player, { msg = { type = "sell_fail", reason = "AuditFail", id = instanceId } })
+		local item, groupName, key = findItem()
+		if not item then
+			ProfileUpdatedRE:FireClient(player, { msg = { type = "sell_fail", reason = "NotFound", id = instanceId } })
 			return
 		end
-		auditId = id
-	end
 
-	-- Apply coins and remove the item
-	profile.Account.Coins = (profile.Account.Coins or 0) + coins
+		-- Prevent selling equipped items
+		if (item.Equipped == true) or (item.data and item.data.Equipped == true) then
+			ProfileUpdatedRE:FireClient(player, { msg = { type = "sell_fail", reason = "Equipped", id = instanceId } })
+			return
+		end
 
-	-- Remove from data structures
-	if profile.Items and profile.Items.Categories and groupName and profile.Items.Categories[groupName] and type(profile.Items.Categories[groupName].List) == "table" then
-		local list = profile.Items.Categories[groupName].List
-		for i = #list, 1, -1 do
-			if list[i] and list[i].Id == instanceId then
-				table.remove(list, i)
-				break
+		-- Determine rarity from item stats/catalog (use stars) instead of Quality
+		local function resolveStarsForItem(entry)
+			-- 1) If the item already has a Catalog.stars field (enriched snapshot), use it
+			if entry.Catalog and entry.Catalog.stars then
+				return entry.Catalog.stars
+			end
+			-- 2) Try to resolve via CharacterCatalog (by template name)
+			local template = entry.Template or (entry.data and entry.data.Template) or entry.Id
+			local starsFromTemplate = nil
+			if template then
+				local RS = game:GetService("ReplicatedStorage")
+				local Scripts = RS:FindFirstChild("Scripts")
+				local okCat, CharacterCatalog = pcall(function()
+					return require(Scripts:FindFirstChild("CharacterCatalog"))
+				end)
+				if okCat and CharacterCatalog and CharacterCatalog.Get then
+					local catEntry = CharacterCatalog:Get(template)
+					if catEntry and catEntry.stars then
+						starsFromTemplate = catEntry.stars
+					end
+				end
+				-- 3) Fallback: parse suffix like _5 from template names
+				if not starsFromTemplate then
+					local suffix = template:match("_(%d+)$")
+					if suffix then starsFromTemplate = tonumber(suffix) end
+				end
+			end
+			return starsFromTemplate or 1
+		end
+
+		local function starsToRarity(s)
+			s = tonumber(s) or 1
+			if s <= 1 then return "comum" end
+			if s == 2 then return "raro" end
+			if s == 3 then return "epico" end
+			return "lendario"
+		end
+
+		local stars = resolveStarsForItem(item)
+		if type(stars) ~= "number" or stars < 1 then stars = 1 end
+		if stars > 6 then stars = 6 end
+		local rarity = starsToRarity(stars)
+
+		-- Fixed price mapping requested by user
+		local priceByRarity = {
+			comum = 100,
+			raro = 500,
+			epico = 1000,
+			lendario = 2500,
+		}
+		local coins = priceByRarity[rarity] or priceByRarity["comum"]
+
+		-- Attempt to persist an audit entry BEFORE mutating the profile
+		if SaleAudit then
+			local templateName = item.Template or (item.data and item.data.Template) or item.Id
+			local entry = {
+				type = "item",
+				instanceId = instanceId,
+				template = templateName,
+				rarity = rarity,
+				stars = stars,
+				coins = coins,
+			}
+			local id, aerr = SaleAudit:LogSale(player.UserId, entry)
+			if not id then
+				ProfileUpdatedRE:FireClient(player, { msg = { type = "sell_fail", reason = "AuditFail", id = instanceId } })
+				return
+			end
+			auditId = id
+		end
+
+		-- Apply coins and remove the item
+		profile.Account.Coins = (profile.Account.Coins or 0) + coins
+
+		-- Remove from data structures
+		if profile.Items and profile.Items.Categories and groupName and profile.Items.Categories[groupName] and type(profile.Items.Categories[groupName].List) == "table" then
+			local list = profile.Items.Categories[groupName].List
+			for i = #list, 1, -1 do
+				if list[i] and list[i].Id == instanceId then
+					table.remove(list, i)
+					break
+				end
+			end
+		elseif profile.Items and profile.Items.Owned and groupName then
+			local grp = profile.Items.Owned[groupName]
+			if grp then
+				if grp.Instances and grp.Instances[key] then
+					grp.Instances[key] = nil
+				else
+					grp[key] = nil
+				end
 			end
 		end
-	elseif profile.Items and profile.Items.Owned and groupName then
-		local grp = profile.Items.Owned[groupName]
-		if grp then
-			if grp.Instances and grp.Instances[key] then
-				grp.Instances[key] = nil
-			else
-				grp[key] = nil
-			end
-		end
-	end
 
 	end)
 
@@ -1167,21 +1192,21 @@ end
 -- =============================
 RedeemCodeRE.OnServerEvent:Connect(function(player, codeInput)
 	if not player or not codeInput then return end
-	
+
 	local profile = ProfileService:Get(player)
 	if not profile then
 		warn("[RedeemCode] No profile for", player.Name)
 		return
 	end
-	
+
 	-- Normalize code to uppercase
 	local code = string.upper(tostring(codeInput))
-	
+
 	-- Ensure RedeemedCodes table exists (for older profiles)
 	if not profile.Account.RedeemedCodes then
 		profile.Account.RedeemedCodes = {}
 	end
-	
+
 	-- Check if already redeemed
 	if profile.Account.RedeemedCodes[code] then
 		print(string.format("[RedeemCode] %s tried to redeem '%s' - already redeemed", player.Name, code))
@@ -1192,7 +1217,7 @@ RedeemCodeRE.OnServerEvent:Connect(function(player, codeInput)
 		end
 		return
 	end
-	
+
 	-- Validate code
 	local isValid, codeDataOrError = RedeemCodes:IsValidCode(code)
 	if not isValid then
@@ -1203,17 +1228,17 @@ RedeemCodeRE.OnServerEvent:Connect(function(player, codeInput)
 		end
 		return
 	end
-	
+
 	-- Get rewards
 	local rewards = RedeemCodes:GetRewards(code)
 	if not rewards then
 		warn("[RedeemCode] Failed to get rewards for code:", code)
 		return
 	end
-	
+
 	print(string.format("[RedeemCode] Applying rewards - Gold: %d, Gems: %d", rewards.Gold or 0, rewards.Gems or 0))
 	print(string.format("[RedeemCode] Before - Coins: %d, Gems: %d", profile.Account.Coins or 0, profile.Account.Gems or 0))
-	
+
 	-- Apply rewards
 	if rewards.Gold and rewards.Gold > 0 then
 		profile.Account.Coins = (profile.Account.Coins or 0) + rewards.Gold
@@ -1221,19 +1246,19 @@ RedeemCodeRE.OnServerEvent:Connect(function(player, codeInput)
 	if rewards.Gems and rewards.Gems > 0 then
 		profile.Account.Gems = (profile.Account.Gems or 0) + rewards.Gems
 	end
-	
+
 	print(string.format("[RedeemCode] After - Coins: %d, Gems: %d", profile.Account.Coins or 0, profile.Account.Gems or 0))
-	
+
 	-- Mark code as redeemed
 	profile.Account.RedeemedCodes[code] = os.time()
-	
+
 	-- Save profile
 	pushSnapshot(player)
 	print("[RedeemCode] Snapshot sent to client")
-	
+
 	print(string.format("[RedeemCode] %s redeemed '%s' - Gold: +%d, Gems: +%d", 
 		player.Name, code, rewards.Gold or 0, rewards.Gems or 0))
-	
+
 	-- Send success to client
 	local result = remotesFolder:FindFirstChild("RedeemCodeResult")
 	if result and result:IsA("RemoteEvent") then
@@ -1407,9 +1432,9 @@ GetMissionsStatusRF.OnServerInvoke = function(player)
 		warn("[GetMissionsStatus] No profile for", player.Name)
 		return { success = false, message = "Profile not found" }
 	end
-	
+
 	local missionsStatus = MissionsService:GetAllMissionsStatus(profile)
-	
+
 	return {
 		success = true,
 		missions = missionsStatus,
@@ -1420,21 +1445,21 @@ end
 -- Claim mission reward
 ClaimMissionRewardRE.OnServerEvent:Connect(function(player, missionID)
 	if not player or not missionID then return end
-	
+
 	local profile = ProfileService:Get(player)
 	if not profile then
 		warn("[ClaimMissionReward] No profile for", player.Name)
 		return
 	end
-	
+
 	local success, message = MissionsService:ClaimMissionReward(profile, missionID)
-	
+
 	if success then
 		-- Save and update client
 		pushSnapshot(player)
 		print(string.format("[ClaimMissionReward] %s claimed %s - %s", player.Name, missionID, message))
 	end
-	
+
 	-- Send result back to client (via existing remote or create new one)
 	-- For now, client will refresh missions list after claiming
 	if MissionProgressUpdatedRE then

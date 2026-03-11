@@ -2,6 +2,8 @@ local Players = game:GetService("Players")
 local ReplicatedStorage = game:GetService("ReplicatedStorage")
 
 local player = Players.LocalPlayer
+local SFXHelper = require(ReplicatedStorage:WaitForChild("Scripts"):WaitForChild("SFXHelper"))
+local LEVELUP_SFX_ID = 112485797063762
 
 -- UI nodes (wait safely to avoid nils)
 local gui = script.Parent
@@ -82,6 +84,12 @@ if ok and eventsFolder then
 	if ev and ev:IsA("RemoteEvent") then
 		ev.OnClientEvent:Connect(function(newLevel)
 			setLevelText(newLevel)
+			-- SFX de level up
+			local char = player.Character
+			local hrp = char and (char:FindFirstChild("HumanoidRootPart") or char.PrimaryPart)
+			if hrp then
+				SFXHelper.playAt(hrp, LEVELUP_SFX_ID, 1, { minDist = 10, maxDist = 60, lifetime = 4 })
+			end
 			-- Abrir ofertas de cartas no level up (se função global existir)
 			local function tryShow()
 				local ok2, fn = pcall(function() return _G.ShowCardOffers end)

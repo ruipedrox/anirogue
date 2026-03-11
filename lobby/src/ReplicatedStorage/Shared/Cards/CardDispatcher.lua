@@ -19,149 +19,188 @@ local Dispatcher = {}
 local _moduleCache: { [string]: any } = {}
 -- Cartas aplicadas por jogador (tracking simples por id) para eventuais limpezas
 local _playerCards: { [Player]: { [string]: boolean } } = {}
+-- Tracking completo de cartas de módulo aplicadas (meta + level) para poder reiniciar loops no revive
+local _appliedModuleCards: { [Player]: { { meta: any, level: number } } } = {}
 
 -- Obtém (e faz require se necessário) o ModuleScript da carta (campo def.module)
 function Dispatcher.GetModule(name: string)
-    if type(name) ~= "string" or #name == 0 then return nil end
-    if _moduleCache[name] ~= nil then return _moduleCache[name] end
-    local modScript = CardsFolder:FindFirstChild(name)
-    if not modScript then
-        warn("[CardDispatcher] Module not found:", name)
-        _moduleCache[name] = false
-        return nil
-    end
-    local ok, mod = pcall(require, modScript)
-    if not ok then
-        warn("[CardDispatcher] Error requiring module", name, mod)
-        _moduleCache[name] = false
-        return nil
-    end
-    _moduleCache[name] = mod
-    return mod
+	if type(name) ~= "string" or #name == 0 then return nil end
+	if _moduleCache[name] ~= nil then
+		local cached = _moduleCache[name]
+		if cached == false then
+			warn("[CardDispatcher] GetModule: '" .. name .. "' is cached as FAILED")
+		end
+		return cached or nil
+	end
+	print("[CardDispatcher] Requiring module:", name)
+	local modScript = CardsFolder:FindFirstChild(name)
+	if not modScript then
+		warn("[CardDispatcher] Module not found:", name)
+		_moduleCache[name] = false
+		return nil
+	end
+	local ok, mod = pcall(require, modScript)
+	if not ok then
+		warn("[CardDispatcher] Error requiring module", name, tostring(mod))
+		_moduleCache[name] = false
+		return nil
+	end
+	print("[CardDispatcher] Module loaded OK:", name, "| OnCardAdded:", type(mod and mod.OnCardAdded))
+	_moduleCache[name] = mod
+	return mod
 end
 
 -- Permite consultar se um jogador já tem uma carta aplicada (por id meta.id)
 function Dispatcher.HasPlayerCard(player: Player, cardId: string)
-    local set = _playerCards[player]
-    return set and set[cardId] or false
+	local set = _playerCards[player]
+	return set and set[cardId] or false
 end
 
 -- Marca que o jogador recebeu a carta
 local function markPlayerCard(player: Player, cardId: string)
-    if not player or not cardId then return end
-    local set = _playerCards[player]
-    if not set then
-        set = {}
-        _playerCards[player] = set
-    end
-    set[cardId] = true
+	if not player or not cardId then return end
+	local set = _playerCards[player]
+	if not set then
+		set = {}
+		_playerCards[player] = set
+	end
+	set[cardId] = true
 end
 
 -- Limpa tracking (chamar em PlayerRemoving)
 function Dispatcher.ClearPlayer(player: Player)
-    _playerCards[player] = nil
+	_playerCards[player] = nil
+	_appliedModuleCards[player] = nil
+end
+
+-- Reinicia loops/auras de cartas de módulo após o personagem ressuscitar.
+-- Cartas de stat não precisam de ser reaplicadas (valores persistem em player.Upgrades).
+function Dispatcher.RestartLoopsForPlayer(player: Player)
+	-- Parar primeiro qualquer loop que ainda esteja a correr
+	Dispatcher.StopAllForPlayer(player)
+	local cards = _appliedModuleCards[player]
+	if not cards then return end
+	for _, entry in ipairs(cards) do
+		local def = (entry.meta and entry.meta._def) or entry.meta
+		if type(def) == "table" and type(def.module) == "string" then
+			local mod = Dispatcher.GetModule(def.module)
+			if mod then
+				if type(mod.OnCardAdded) == "function" then
+					pcall(mod.OnCardAdded, player, def, entry.level)
+				elseif type(mod.Apply) == "function" then
+					pcall(mod.Apply, player, def)
+				end
+			end
+		end
+	end
 end
 
 -- Tenta chamar Stop(player) em todos módulos que possuam essa função (para loops/aura)
 function Dispatcher.StopAllForPlayer(player: Player)
-    for name, mod in pairs(_moduleCache) do
-        if mod and type(mod) == "table" then
-            local stopFn = rawget(mod, "Stop")
-            if type(stopFn) == "function" then
-                pcall(stopFn, player)
-            end
-        end
-    end
+	for name, mod in pairs(_moduleCache) do
+		if mod and type(mod) == "table" then
+			local stopFn = rawget(mod, "Stop")
+			if type(stopFn) == "function" then
+				pcall(stopFn, player)
+			end
+		end
+	end
 end
 
 -- Upgrades bucket: ApplyStats reads from here every time and folds into Stats before applying to Humanoid
 local function ensureUpgrades(player: Player)
-    local upgrades = player:FindFirstChild("Upgrades")
-    if not upgrades then
-        upgrades = Instance.new("Folder")
-        upgrades.Name = "Upgrades"
-        upgrades.Parent = player
-    end
-    return upgrades
+	local upgrades = player:FindFirstChild("Upgrades")
+	if not upgrades then
+		upgrades = Instance.new("Folder")
+		upgrades.Name = "Upgrades"
+		upgrades.Parent = player
+	end
+	return upgrades
 end
 
 local function addUpgrade(player: Player, name: string, delta: number)
-    if type(delta) ~= "number" or delta == 0 then return end
-    local upgrades = ensureUpgrades(player)
-    local nv = upgrades:FindFirstChild(name)
-    if not nv then
-        nv = Instance.new("NumberValue")
-        nv.Name = name
-        nv.Value = 0
-        nv.Parent = upgrades
-    end
-    nv.Value += delta
+	if type(delta) ~= "number" or delta == 0 then return end
+	local upgrades = ensureUpgrades(player)
+	local nv = upgrades:FindFirstChild(name)
+	if not nv then
+		nv = Instance.new("NumberValue")
+		nv.Name = name
+		nv.Value = 0
+		nv.Parent = upgrades
+	end
+	nv.Value += delta
 end
 
 -- Aplica uma carta genérica.
 -- meta: tabela enviada ao cliente (contém _def, _tier se equipamento)
 -- currentLevel: nível atual da carta (para cartas stackable)
 function Dispatcher.ApplyCard(player: Player, meta, currentLevel: number?)
-    if not player or not meta then return end
-    local def = meta._def or meta -- fallback
-    if type(def) ~= "table" then return end
-    local level = currentLevel or 1
+	if not player or not meta then return end
+	local def = meta._def or meta -- fallback
+	if type(def) ~= "table" then return end
+	local level = currentLevel or 1
 
-    -- 1) Se tem module, despacha para o módulo
-    if type(def.module) == "string" and #def.module > 0 then
-        local mod = Dispatcher.GetModule(def.module)
-        if mod then
-            -- Check for OnCardAdded (for stackable cards with levels)
-            if type(mod.OnCardAdded) == "function" then
-                local ok2, err = pcall(mod.OnCardAdded, player, def, level)
-                if not ok2 then
-                    warn("[CardDispatcher] Error calling OnCardAdded", def.module, err)
-                else
-                    markPlayerCard(player, meta.id or def.module)
-                end
-            -- Fallback to Apply for legacy cards
-            elseif type(mod.Apply) == "function" then
-                local ok2, err = pcall(mod.Apply, player, def)
-                if not ok2 then
-                    warn("[CardDispatcher] Error applying module", def.module, err)
-                else
-                    markPlayerCard(player, meta.id or def.module)
-                end
-            end
-        end
-        return
-    end
+	-- 1) Se tem module, despacha para o módulo
+	if type(def.module) == "string" and #def.module > 0 then
+		local mod = Dispatcher.GetModule(def.module)
+		if mod then
+			-- Check for OnCardAdded (for stackable cards with levels)
+			if type(mod.OnCardAdded) == "function" then
+				local ok2, err = pcall(mod.OnCardAdded, player, def, level)
+				if not ok2 then
+					warn("[CardDispatcher] Error calling OnCardAdded", def.module, err)
+				else
+					markPlayerCard(player, meta.id or def.module)
+					-- Track for loop restart on revive
+					if not _appliedModuleCards[player] then _appliedModuleCards[player] = {} end
+					table.insert(_appliedModuleCards[player], { meta = meta, level = level })
+				end
+				-- Fallback to Apply for legacy cards
+			elseif type(mod.Apply) == "function" then
+				local ok2, err = pcall(mod.Apply, player, def)
+				if not ok2 then
+					warn("[CardDispatcher] Error applying module", def.module, err)
+				else
+					markPlayerCard(player, meta.id or def.module)
+					-- Track for loop restart on revive
+					if not _appliedModuleCards[player] then _appliedModuleCards[player] = {} end
+					table.insert(_appliedModuleCards[player], { meta = meta, level = level })
+				end
+			end
+		end
+		return
+	end
 
-    -- 2) Stat card (equipment ou futura) baseada em amount / amountPerTier
-    local statName = def.statName
-    if type(statName) == "string" then
-        local delta = 0
-        if type(def.amount) == "number" then
-            delta = def.amount
-        elseif type(def.amountPerTier) == "number" then
-            local tier = meta._tier or def.tier or 1
-            delta = def.amountPerTier * tier
-        end
-        if delta ~= 0 then
-            -- Write to Upgrades so ApplyStats will fold and then update Humanoid (MaxHealth, etc)
-            addUpgrade(player, statName, delta)
-            -- Trigger a stats recompute now
-            local okApply, ApplyStats = pcall(function()
-                return require(ReplicatedStorage.Scripts.ApplyStats)
-            end)
-            if okApply and ApplyStats and type(ApplyStats.Apply) == "function" then
-                local EquippedItems = require(ReplicatedStorage.Scripts.EquipedItems)
-                local CharEquipped = require(ReplicatedStorage.Scripts.CharEquiped)
-                local items = EquippedItems:GetEquipped(player)
-                local chars = CharEquipped:GetEquipped(player)
-                pcall(function() ApplyStats:Apply(player, items, chars) end)
-            end
-        end
-        return
-    end
+	-- 2) Stat card (equipment ou futura) baseada em amount / amountPerTier
+	local statName = def.statName
+	if type(statName) == "string" then
+		local delta = 0
+		if type(def.amount) == "number" then
+			delta = def.amount
+		elseif type(def.amountPerTier) == "number" then
+			local tier = meta._tier or def.tier or 1
+			delta = def.amountPerTier * tier
+		end
+		if delta ~= 0 then
+			-- Write to Upgrades so ApplyStats will fold and then update Humanoid (MaxHealth, etc)
+			addUpgrade(player, statName, delta)
+			-- Trigger a stats recompute now
+			local okApply, ApplyStats = pcall(function()
+				return require(ReplicatedStorage.Scripts.ApplyStats)
+			end)
+			if okApply and ApplyStats and type(ApplyStats.Apply) == "function" then
+				local EquippedItems = require(ReplicatedStorage.Scripts.EquipedItems)
+				local CharEquipped = require(ReplicatedStorage.Scripts.CharEquiped)
+				local items = EquippedItems:GetEquipped(player)
+				local chars = CharEquipped:GetEquipped(player)
+				pcall(function() ApplyStats:Apply(player, items, chars) end)
+			end
+		end
+		return
+	end
 
-    -- 3) Sem handler conhecido
-    warn("[CardDispatcher] No handler for card id", meta.id or "<unknown>")
+	-- 3) Sem handler conhecido
+	warn("[CardDispatcher] No handler for card id", meta.id or "<unknown>")
 end
 
 return Dispatcher

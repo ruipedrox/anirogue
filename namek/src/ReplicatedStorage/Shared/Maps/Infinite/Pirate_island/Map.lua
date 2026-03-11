@@ -4,9 +4,9 @@ local Template = require(ReplicatedStorage:WaitForChild("Shared"):WaitForChild("
 local M = Template.New()
 M.Id = "Pirate_Island"
 M.DisplayName = "Pirate Island"
-M.PlaceId = 0 -- replace with the actual gameplay place id for Green Planet
-M.PreviewImage = "rbxassetid://92510023198914"
-M.BackgroundImage = "rbxassetid://92510023198914"
+M.PlaceId = 92510023198914 -- replace with the actual gameplay place id for Green Planet
+M.PreviewImage = "rbxassetid://92780265236521"
+M.BackgroundImage = "rbxassetid://92780265236521"
 M.Levels = {
 	-- Infinite-mode WaveKey: use a map-specific key so Infinite runner resolves the correct config
 	{ Level = 1, BossImage = "rbxassetid://0", WaveKey = "pirate_island_l1" },

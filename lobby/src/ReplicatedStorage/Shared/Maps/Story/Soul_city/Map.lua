@@ -6,8 +6,8 @@ M.Id = "Soul_City"
 M.DisplayName = "Soul City"
 M.SortOrder = 3
 M.PlaceId = 126257605786546 -- replace with the actual gameplay place id for Village
-M.PreviewImage = "rbxassetid://0"
-M.BackgroundImage = "rbxassetid://0"
+M.PreviewImage = "rbxassetid://139479678449870"
+M.BackgroundImage = "rbxassetid://139479678449870"
 M.Levels = {
     { Level = 1, BossImage = "rbxassetid://0", WaveKey = "soul_city_l1" },
     { Level = 2, BossImage = "rbxassetid://0", WaveKey = "soul_city_l2" },

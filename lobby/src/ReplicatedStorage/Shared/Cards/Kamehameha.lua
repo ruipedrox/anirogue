@@ -9,6 +9,9 @@ local TweenService = game:GetService("TweenService")
 
 local ScriptsFolder = ReplicatedStorage:WaitForChild("Scripts")
 local Damage = require(ScriptsFolder:WaitForChild("Combat"):WaitForChild("Damage"))
+local SFXHelper = require(ScriptsFolder:WaitForChild("SFXHelper"))
+
+local KAMEHAMEHA_SFX_ID = 134575329727831
 
 local M = {}
 
@@ -17,7 +20,7 @@ local running: { [Player]: RBXScriptConnection } = {}
 -- Orientation offsets (adjust if your models are built along Y-axis)
 local ROTATE_X = math.rad(90) -- rotate 90 degrees around X to lay beam horizontally
 local FORWARD_OFFSET_CHARGE = -2
-local FORWARD_OFFSET_BEAM = 4
+local FORWARD_OFFSET_BEAM = -4
 
 local function getStats(player: Player)
 	local stats = player:FindFirstChild("Stats")
@@ -218,8 +221,8 @@ function M.Start(player: Player)
 		local onInterval = upgrades and upgrades:FindFirstChild("OnInterval") or ensureFolder(ensureFolder(player, "Upgrades"), "OnInterval")
 		local cfg = onInterval:FindFirstChild("Kamehameha") or ensureFolder(onInterval, "Kamehameha")
 		local cooldownNV = ensureNumber(cfg, "Cooldown", 10)
-		local chargeNV = ensureNumber(cfg, "ChargeTime", 2)
-		local durationNV = ensureNumber(cfg, "BeamDuration", 3)
+		local chargeNV = ensureNumber(cfg, "ChargeTime", 3)
+		local durationNV = ensureNumber(cfg, "BeamDuration", 4)
 		local tickNV = ensureNumber(cfg, "TickInterval", 0.5)
 		local dmgPctNV = ensureNumber(cfg, "DamagePercent", 50)
 		local sizeScaleNV = ensureNumber(cfg, "SizeScale", 1)
@@ -254,6 +257,7 @@ function M.Start(player: Player)
 		busy.Value = true
 
 		-- Charge phase (scale up over ChargeTime)
+		SFXHelper.playAt(hrp, KAMEHAMEHA_SFX_ID, 0.9, { minDist = 15, maxDist = 120, lifetime = durationNV.Value + 1 })
 		local charge = chargeTemplate:Clone()
 		charge.Name = "Kame_Charge_Instance"
 		charge.Parent = character
@@ -281,6 +285,7 @@ function M.Start(player: Player)
 		pcall(function() charge:Destroy() end)
 
 		-- Fire beam
+		
 		local beam = beamTemplate:Clone()
 		beam.Name = "Kamehameha_Instance"
 		beam.Parent = character
@@ -310,7 +315,7 @@ function M.Start(player: Player)
 			beamTemplate:SetAttribute("BaseForwardSize", baseForwardSize)
 			-- Distância que a face traseira tinha originalmente (offset para frente - metade do comprimento)
 			-- FORWARD_OFFSET_BEAM é negativo (para frente). Distância positiva para frente = -FORWARD_OFFSET_BEAM.
-			backFaceDist = (-FORWARD_OFFSET_BEAM) - (baseForwardSize / 2)
+			backFaceDist = (FORWARD_OFFSET_BEAM-(baseForwardSize/2))
 			beamTemplate:SetAttribute("BackFaceDistance", backFaceDist)
 		else
 			backFaceDist = backFaceDist or 0
@@ -473,8 +478,8 @@ function M.Apply(player: Player, def)
 	local sizePerLevel = typeof(def.sizePerLevel) == "number" and def.sizePerLevel or 0.25
 	-- Extra bonus applied only at the final level (último nível)
 	local finalLevelExtra = typeof(def.finalLevelExtra) == "number" and def.finalLevelExtra or 0.25
-	local duration = typeof(def.duration) == "number" and def.duration or 3
-	local chargeTime = typeof(def.chargeTime) == "number" and def.chargeTime or 2
+	local duration = typeof(def.duration) == "number" and def.duration or 4
+	local chargeTime = typeof(def.chargeTime) == "number" and def.chargeTime or 3
 	local tickInterval = typeof(def.tickInterval) == "number" and def.tickInterval or 0.5
 
 	local effectiveCooldown = baseCooldown + cdPerLevel * (L - 1)

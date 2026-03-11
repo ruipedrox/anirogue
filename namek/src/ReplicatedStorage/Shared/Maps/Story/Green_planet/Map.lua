@@ -5,9 +5,9 @@ local M = Template.New()
 M.Id = "Green_Planet"
 M.DisplayName = "Green Planet"
 M.SortOrder = 2
-M.PlaceId = 0 -- replace with the actual gameplay place id for Green Planet
-M.PreviewImage = "rbxassetid://125509760649958"
-M.BackgroundImage = "rbxassetid://125509760649958"
+M.PlaceId = 125509760649958 -- replace with the actual gameplay place id for Green Planet
+M.PreviewImage = "rbxassetid://137901477635745"
+M.BackgroundImage = "rbxassetid://137901477635745"
 M.Levels = {
     { Level = 1, BossImage = "rbxassetid://0", WaveKey = "green_planet_l1" },
     { Level = 2, BossImage = "rbxassetid://0", WaveKey = "green_planet_l2" },

@@ -42,8 +42,8 @@ SukunaCards.Definitions = {
 			image = "rbxassetid://83590374712349",
             module = "Sukuna_WorldCuttingSlash",
             requiredCards = {
-                { cardId = "Sukuna_Cleave", minLevel = 1 },
-                { cardId = "Sukuna_Dismantle", minLevel = 1 },
+                { cardId = "Sukuna_Cleave", minLevel = 5 },
+                { cardId = "Sukuna_Dismantle", minLevel = 5 },
             },
         },
     },

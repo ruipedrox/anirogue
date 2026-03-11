@@ -8,6 +8,9 @@ local TweenService = game:GetService("TweenService")
 local Projectile = require(ReplicatedStorage:WaitForChild("Scripts"):WaitForChild("Projectile"))
 local Damage = require(ReplicatedStorage:WaitForChild("Scripts"):WaitForChild("Combat"):WaitForChild("Damage"))
 local DoT = require(ReplicatedStorage:WaitForChild("Scripts"):WaitForChild("Combat"):WaitForChild("DoT"))
+local SFXHelper = require(ReplicatedStorage:WaitForChild("Scripts"):WaitForChild("SFXHelper"))
+
+local FLAMING_ARROW_SFX_ID = 114596541216552
 
 local def = {
     Name = "Flaming Arrow",
@@ -18,11 +21,11 @@ local def = {
 }
 
 local statsPerLevel = {
-    [1] = { damagePercent = 1.0, cooldown = 6, chargeTime = 1.2, size = 1.0, speed = 120, pierce = 2, explosionRadius = 4, burnPlayerPercent = 0.5 },
+    [1] = { damagePercent = 1.0, cooldown = 6, chargeTime = 1.3, size = 1.0, speed = 120, pierce = 2, explosionRadius = 4, burnPlayerPercent = 0.5 },
     [2] = { damagePercent = 1.25, cooldown = 5.5, chargeTime = 1.3, size = 1.2, speed = 140, pierce = 2, explosionRadius = 5, burnPlayerPercent = 0.6 },
-    [3] = { damagePercent = 1.5, cooldown = 5.0, chargeTime = 1.4, size = 1.5, speed = 160, pierce = 3, explosionRadius = 6, burnPlayerPercent = 0.7 },
-    [4] = { damagePercent = 1.75, cooldown = 4.5, chargeTime = 1.5, size = 1.8, speed = 180, pierce = 3, explosionRadius = 7, burnPlayerPercent = 0.8 },
-    [5] = { damagePercent = 2.0, cooldown = 4.0, chargeTime = 1.6, size = 2.2, speed = 220, pierce = 4, explosionRadius = 8, burnPlayerPercent = 1.0 },
+    [3] = { damagePercent = 1.5, cooldown = 5.0, chargeTime = 1.3, size = 1.5, speed = 160, pierce = 3, explosionRadius = 6, burnPlayerPercent = 0.7 },
+    [4] = { damagePercent = 1.75, cooldown = 4.5, chargeTime = 1.3, size = 1.8, speed = 180, pierce = 3, explosionRadius = 7, burnPlayerPercent = 0.8 },
+    [5] = { damagePercent = 2.0, cooldown = 4.0, chargeTime = 1.3, size = 2.2, speed = 220, pierce = 4, explosionRadius = 8, burnPlayerPercent = 1.0 },
 }
 
 local ActiveByUser = {}
@@ -219,7 +222,7 @@ local function explodeAt(position, ownerPlayer, projectileDamage, explosionRadiu
                         Damage.Apply(hum, projectileDamage)
                     end
                     if burnPlayerDamage and burnPlayerDamage > 0 then
-                        DoT.Apply(hum, { dotType = "burn", playerDamage = burnPlayerDamage, tick = 0.25 })
+                        DoT.Apply(hum, { dotType = "burn", playerDamage = burnPlayerDamage, tick = 0.25, player = ownerPlayer })
                     end
                 end
             end
@@ -295,7 +298,7 @@ local function explodeAt(position, ownerPlayer, projectileDamage, explosionRadiu
     -- (we already spawned a simple neon blast above; nothing else to do)
 end
 
-local function fireArrow(player, stats)
+local function fireArrow(player, stats, aimDirection)
     if not player or not player.Character then return end
     local hrp = player.Character:FindFirstChild("HumanoidRootPart")
     if not hrp then return end
@@ -307,24 +310,23 @@ local function fireArrow(player, stats)
         if bd and bd:IsA("NumberValue") then baseDamage = bd.Value end
     end
 
-    local aimPos = findNearestEnemyPosition(hrp.Position) or (hrp.Position + hrp.CFrame.LookVector * 50)
-    local direction = (aimPos - hrp.Position)
-    if direction.Magnitude <= 0 then direction = hrp.CFrame.LookVector end
-    direction = direction.Unit
+    -- Use aimDirection passed from charge phase; fallback to re-calculating
+    local direction = aimDirection
+    if not direction or direction.Magnitude <= 0 then
+        local aimPos = findNearestEnemyPosition(hrp.Position) or (hrp.Position + hrp.CFrame.LookVector * 50)
+        direction = (aimPos - hrp.Position)
+        if direction.Magnitude <= 0 then direction = hrp.CFrame.LookVector end
+        direction = direction.Unit
+    end
 
     local projectileDamage = baseDamage * stats.damagePercent
 
     local model = createProjectileModel(stats.size)
+    local origin = hrp.Position + direction * (stats.size * 2 + 1) + Vector3.new(0, 1, 0)
     -- orient projectile model to face the firing direction
     if model and typeof(model) == "Instance" and model:IsA("Model") and model.PrimaryPart then
-        -- align PrimaryPart forward to direction (lookAt) - adjust rotation if asset's forward differs
-        local ok, cf = pcall(function() return CFrame.new(origin, origin + direction) end)
-        if ok and cf then
-            -- apply a small rotation so the model lies along the direction (tweak if needed)
-            model:SetPrimaryPartCFrame(cf * CFrame.Angles(math.rad(0), 0, 0))
-        end
+        model:SetPrimaryPartCFrame(CFrame.new(origin, origin + direction))
     end
-    local origin = hrp.Position + hrp.CFrame.LookVector * (stats.size * 2 + 1) + Vector3.new(0, 1, 0)
     local lifetime = 2
     local handle = Projectile.Fire({
         origin = origin,
@@ -342,7 +344,7 @@ local function fireArrow(player, stats)
             -- don't damage the owner player
             if enemyModel and player and player.Character and enemyModel == player.Character then return end
             if hum and hum.Health > 0 then
-                DoT.Apply(hum, { dotType = "burn", playerDamage = projectileDamage, tick = 0.25 })
+                DoT.Apply(hum, { dotType = "burn", playerDamage = projectileDamage, tick = 0.25, player = player })
             end
         end,
     })
@@ -378,6 +380,9 @@ local function chargeAndFire(player, stats)
 
     local charge = createChargeVisual(0.5)
     Debris:AddItem(charge, stats.chargeTime + 1)
+
+    -- SFX 3D: toca no HRP do jogador no início do charge
+    SFXHelper.playAt(hrp, FLAMING_ARROW_SFX_ID, 0.9, { minDist = 10, maxDist = 80 })
 
     local start = os.clock()
     local duration = stats.chargeTime or 1.2
@@ -421,12 +426,22 @@ local function chargeAndFire(player, stats)
         task.wait(0.03)
     end
 
+    -- Capturar a direção final apontada pelo charge para passar ao fireArrow
+    local finalAimPos = findNearestEnemyPosition(hrp.Position)
+    local finalDir
+    if finalAimPos then
+        local d = (finalAimPos - hrp.Position)
+        finalDir = d.Magnitude > 0 and d.Unit or hrp.CFrame.LookVector
+    else
+        finalDir = hrp.CFrame.LookVector
+    end
+
     if charge and charge.Parent then charge:Destroy() end
-    fireArrow(player, stats)
+    fireArrow(player, stats, finalDir)
 end
 
-function def.OnEquip(player, level)
-    level = math.clamp(level or 1, 1, def.MaxLevel)
+function def.OnEquip(player, level, maxLevel)
+    level = math.clamp(level or 1, 1, maxLevel or def.MaxLevel)
     local userId = player.UserId
     if ActiveByUser[userId] then def.OnUnequip(player) end
 
@@ -468,7 +483,7 @@ function def.OnLevelUp(player, newLevel)
 end
 
 function def.OnCardAdded(player, defTable, level)
-    def.OnEquip(player, level or 1)
+    def.OnEquip(player, level or 1, defTable and tonumber(defTable.maxLevel))
 end
 
 return def

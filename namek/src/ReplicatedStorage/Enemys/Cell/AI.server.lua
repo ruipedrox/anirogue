@@ -11,6 +11,12 @@ local RunService = game:GetService("RunService")
 local ScriptsFolder = ReplicatedStorage:WaitForChild("Scripts")
 local CombatFolder = ScriptsFolder:WaitForChild("Combat")
 local Damage = require(CombatFolder:WaitForChild("Damage"))
+local SFXHelper = require(ScriptsFolder:WaitForChild("SFXHelper"))
+local NORMAL_SFX_ID     = 75572923732885
+local KAMEHAME_SFX_ID   = 125899048399910
+local TP_SFX_ID         = 104018950862217
+local TRANSFORM_SFX_ID  = 123587824975222
+local POWERUP_SFX_ID    = 128025610594825
 
 -- Attack models
 local EnemysFolder = ReplicatedStorage:WaitForChild("Enemys")
@@ -188,6 +194,7 @@ local function performKamehameha(targetRoot)
 			kamehameAnim:Play(0.1, 1, 1)
 		end)
 	end
+	SFXHelper.playAt(root, KAMEHAME_SFX_ID, 0.7, { minDist = 10, maxDist = 80 })
 	
 	-- Phase 1: Charge (1.5s) - spawn kame_charge on hand
 	print("[Cell] Charging Kamehameha...")
@@ -386,6 +393,7 @@ local function performSuperCellTransform()
 			superCellAnim:Play(0.1, 1, 1)
 		end)
 	end
+	SFXHelper.playAt(root, TRANSFORM_SFX_ID, 0.7, { minDist = 10, maxDist = 80 })
 	
 	-- Wait for animation to complete
 	local animDuration = (superCellAnim and superCellAnim.Length) or 3.0
@@ -417,8 +425,7 @@ local function performSuperCellTransform()
 	explosion.Size = Vector3.new(1, 1, 1)
 	explosion.CFrame = root.CFrame
 	explosion.Parent = workspace
-	
-	-- Expand explosion
+	SFXHelper.playAt(root, POWERUP_SFX_ID, 0.7, { minDist = 10, maxDist = 80 })
 	local expandDuration = 0.5
 	local maxSize = 20
 	task.spawn(function()
@@ -514,6 +521,7 @@ local function performTeleportStrike(targetRoot)
 	
 	-- Phase 2: Teleport to target
 	print("[Cell] Teleporting!")
+	SFXHelper.playAt(root, TP_SFX_ID, 0.7, { minDist = 10, maxDist = 60 })
 	root.CFrame = CFrame.new(targetPos)
 	
 	-- Phase 3: Attack animation on arrival (tp_attack)
@@ -537,6 +545,7 @@ local function performTeleportStrike(targetRoot)
 						local distance = (playerRoot.Position - root.Position).Magnitude
 						
 						if distance <= damageRadius then
+							SFXHelper.playAt(root, NORMAL_SFX_ID, 0.7, { minDist = 10, maxDist = 60 })
 							local tpDamage = DAMAGE * 1.5 -- Higher damage for teleport
 							Damage.Apply(hum, tpDamage)
 							print("[Cell] Teleport Strike hit", player.Name, "for", tpDamage, "damage!")
@@ -675,6 +684,7 @@ local function performNormalAttack(targetRoot)
 			normalAnim:Play(0.1, 1, 1)
 		end)
 	end
+	SFXHelper.playAt(root, NORMAL_SFX_ID, 0.7, { minDist = 10, maxDist = 60 })
 	
 	-- Wait a bit then deal damage (mid-animation)
 	task.wait(0.3)

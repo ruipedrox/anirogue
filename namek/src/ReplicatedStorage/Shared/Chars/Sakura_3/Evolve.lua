@@ -4,7 +4,7 @@
 return {
     evolve_to = "Sakura_4",
     required_level = 1,
-    cost = { Gold = 1000 },
+    cost = { Gold = 5000 },
     copies_req = { { template = "Sakura_3", count = 3 } },
     copies_mode = "including",
     materials_req = {

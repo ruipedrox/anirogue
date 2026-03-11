@@ -24,15 +24,15 @@ WaveConfig.Burst = {
 }
 
 WaveConfig.SpawnAreas = {
-    {
-        corners = {
-            Vector3.new(-59, 10.73, 32),
-            Vector3.new(5, 10.73, 32),
-            Vector3.new(5, 10.23, -32),
-            Vector3.new(-59, 10.23, -32),
-        },
-        Y = 10.5,
-    }
+	{
+		corners = {
+			Vector3.new(108.816, 45.211, 33.316),
+			Vector3.new(188.64, 45.211, 33.316),
+			Vector3.new(188.64, 45.211, 113.492),
+			Vector3.new(108.816, 45.211, 113.492),
+		},
+		Y = 45.211,
+	}
 }
 
 -- 15 waves - Namek Village difficulty

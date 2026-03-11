@@ -14,8 +14,8 @@ WaveConfig.CharacterXP = {
 WaveConfig.Rates = {
     GoldPerWavePercent = 0.0,    -- No gold per wave (only milestone rewards)
     XPPerWavePercent   = 0.0,    -- No XP per wave (only milestone rewards)
-    HealthPerWavePercent = 0.10, -- +10% Health per wave (aggressive scaling)
-    DamagePerWavePercent = 0.08, -- +8% Damage per wave (aggressive scaling)
+    HealthPerWavePercent = 0.05, -- +10% Health per wave (aggressive scaling)
+    DamagePerWavePercent = 0.05, -- +8% Damage per wave (aggressive scaling)
 }
 
 -- Burst spawning starts early

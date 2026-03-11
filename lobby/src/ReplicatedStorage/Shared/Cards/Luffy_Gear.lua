@@ -2,6 +2,10 @@
 local ReplicatedStorage = game:GetService("ReplicatedStorage")
 local RunService = game:GetService("RunService")
 
+local ScriptsFolder = ReplicatedStorage:WaitForChild("Scripts")
+local SFXHelper = require(ScriptsFolder:WaitForChild("SFXHelper"))
+local GEAR_SFX_ID = 81398150332729
+
 local def = {
     Name = "Gum-Gum Gear",
     Rarity = "Rare",
@@ -95,7 +99,14 @@ local function grantBuff(player, stats)
     applyTempUpgrade(player, atkName, atkVal)
     applyTempUpgrade(player, mvName, mvVal)
 
-    -- spawn a simple vapor particle effect on the player's HRP while buff is active
+    -- SFX ao ativar o gear
+    do
+        local char2 = player and player.Character
+        local hrp2 = char2 and (char2:FindFirstChild("HumanoidRootPart") or char2.PrimaryPart)
+        if hrp2 then
+            SFXHelper.playAt(hrp2, GEAR_SFX_ID, 0.9, { minDist = 15, maxDist = 80, lifetime = 5 })
+        end
+        end
     local vapeAttachment, vapeEmitter
     do
         local char = player and player.Character
@@ -152,8 +163,8 @@ local function grantBuff(player, stats)
     end
 end
 
-function def.OnEquip(player, level)
-    level = math.clamp(level or 1, 1, def.MaxLevel)
+function def.OnEquip(player, level, maxLevel)
+    level = math.clamp(level or 1, 1, maxLevel or def.MaxLevel)
 
     -- reuse existing active entry if present
     local existing = Active[player]
@@ -252,7 +263,7 @@ function def.OnLevelUp(player, newLevel)
 end
 
 function def.OnCardAdded(player, defTable, level)
-    def.OnEquip(player, level or 1)
+    def.OnEquip(player, level or 1, defTable and tonumber(defTable.maxLevel))
 end
 
 return def

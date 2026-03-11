@@ -4,7 +4,7 @@
 return {
     evolve_to = "Luffy_5",
     required_level = 1,
-    cost = { Gold = 5000 },
+    cost = { Gold = 25000 },
     copies_req = { { template = "Luffy_4", count = 3 } },
     copies_mode = "including",
     materials_req = {

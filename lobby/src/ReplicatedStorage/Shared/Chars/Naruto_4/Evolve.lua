@@ -4,7 +4,7 @@
 return {
     evolve_to = "Naruto_5",
     required_level = 1,
-    cost = { Gold = 5000 },
+    cost = { Gold = 25000 },
     copies_req = {
         { template = "Naruto_4", count = 3 }, -- 3 extra copies (excluding the main)
     },

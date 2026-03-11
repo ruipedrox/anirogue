@@ -1,8 +1,7 @@
 -- Melee Alien AI: basic contact damage enemy
 
-local Players = game:GetService("Players")
-local ReplicatedStorage = game:GetService("ReplicatedStorage")
-local CollectionService = game:GetService("CollectionService")
+local ScriptsFolder = ReplicatedStorage:WaitForChild("Scripts")
+local SFXHelper = require(ScriptsFolder:WaitForChild("SFXHelper"))
 
 local RANGE = 3
 local COOLDOWN = 0.5
@@ -345,6 +344,7 @@ task.spawn(function()
 						if attackTrack and not attackTrack.IsPlaying then
 							attackTrack:Play()
 						end
+						SFXHelper.playAt(root, 75572923732885, 0.7, { minDist = 10, maxDist = 60 })
 						phum:TakeDamage(dmg)
 						-- Apply invulnerability frames
 						local invs = getInvTimeSeconds(plr)

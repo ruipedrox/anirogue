@@ -5,6 +5,8 @@ local Debris = game:GetService("Debris")
 local RunService = game:GetService("RunService")
 
 local Damage = require(ReplicatedStorage.Scripts.Combat.Damage)
+local SFXHelper = require(ReplicatedStorage:WaitForChild("Scripts"):WaitForChild("SFXHelper"))
+local GATLING_SFX_ID = 103791028172627
 
 local def = {
     Name = "Gum-Gum Gatling",
@@ -20,11 +22,11 @@ local Active = {}
 
 -- Stats per level (tweak these to change gatling behavior)
 local statsPerLevel = {
-    [1] = { range = 18, coneDeg = 60, duration = 2, tickInterval = 0.1, visualsPerTick = 2, damagePerTickMultiplier = 0.05, cooldown = 6.0, spinSpeed = math.pi/4, visualTravel = 0.35 },
-    [2] = { range = 20, coneDeg = 60, duration = 2, tickInterval = 0.1, visualsPerTick = 2, damagePerTickMultiplier = 0.1, cooldown = 5.5, spinSpeed = math.pi/4, visualTravel = 0.35 },
-    [3] = { range = 22, coneDeg = 60, duration = 2, tickInterval = 0.1, visualsPerTick = 2, damagePerTickMultiplier = 0.15, cooldown = 5.0, spinSpeed = math.pi/4, visualTravel = 0.35 },
-    [4] = { range = 24, coneDeg = 60, duration = 2, tickInterval = 0.1, visualsPerTick = 2, damagePerTickMultiplier = 0.20, cooldown = 4.5, spinSpeed = math.pi/4, visualTravel = 0.35 },
-    [5] = { range = 26, coneDeg = 60, duration = 2, tickInterval = 0.1, visualsPerTick = 2, damagePerTickMultiplier = 0.25, cooldown = 4.0, spinSpeed = math.pi/4, visualTravel = 0.35 },
+    [1] = { range = 18, coneDeg = 60, duration = 3, tickInterval = 0.1, visualsPerTick = 2, damagePerTickMultiplier = 0.05, cooldown = 6.0, spinSpeed = math.pi/4, visualTravel = 0.35 },
+    [2] = { range = 20, coneDeg = 60, duration = 3, tickInterval = 0.1, visualsPerTick = 2, damagePerTickMultiplier = 0.1, cooldown = 5.5, spinSpeed = math.pi/4, visualTravel = 0.35 },
+    [3] = { range = 22, coneDeg = 60, duration = 3, tickInterval = 0.1, visualsPerTick = 2, damagePerTickMultiplier = 0.15, cooldown = 5.0, spinSpeed = math.pi/4, visualTravel = 0.35 },
+    [4] = { range = 24, coneDeg = 60, duration = 3, tickInterval = 0.1, visualsPerTick = 2, damagePerTickMultiplier = 0.20, cooldown = 4.5, spinSpeed = math.pi/4, visualTravel = 0.35 },
+    [5] = { range = 26, coneDeg = 60, duration = 3, tickInterval = 0.1, visualsPerTick = 2, damagePerTickMultiplier = 0.25, cooldown = 4.0, spinSpeed = math.pi/4, visualTravel = 0.35 },
 }
 
 local function safeFindRunTrack(player)
@@ -50,9 +52,16 @@ function def.Fire(player, level, onFinished)
     local stats = statsPerLevel[level] or statsPerLevel[1]
     local range = stats.range or 20
     local coneDeg = stats.coneDeg or 60
-    local duration = stats.duration or 2
-    local spawnInterval = stats.tickInterval or 0.1 -- tick cadence (per-level aware)
+    local duration = stats.duration or 3
+    local spawnInterval = stats.tickInterval or 0.1
     local spawnTicks = math.max(1, math.floor(duration / spawnInterval))
+
+    -- SFX ao disparar
+    local char0 = player.Character
+    local hrp0 = char0 and (char0:FindFirstChild("HumanoidRootPart") or char0.PrimaryPart)
+    if hrp0 then
+        SFXHelper.playAt(hrp0, GATLING_SFX_ID, 0.9, { minDist = 15, maxDist = 80, lifetime = duration + 0.5 })
+    end
     local gumTemplate = nil
     pcall(function()
         gumTemplate = ReplicatedStorage:FindFirstChild("Shared") and ReplicatedStorage.Shared:FindFirstChild("Chars")
@@ -154,8 +163,8 @@ function def.Fire(player, level, onFinished)
 end
 
 -- Card lifecycle
-function def.OnEquip(player, level)
-    level = math.clamp((level ~= nil) and level or 1, 1, def.MaxLevel)
+function def.OnEquip(player, level, maxLevel)
+    level = math.clamp((level ~= nil) and level or 1, 1, maxLevel or def.MaxLevel)
     -- If already active for this player, update level and reuse existing connection/state
     local existing = Active[player]
     if existing then
@@ -240,8 +249,9 @@ function def.OnUnequip(player)
     Active[player] = nil
 end
 
+
 function def.OnCardAdded(player, defTable, level)
-    def.OnEquip(player, level or 1)
+    def.OnEquip(player, level or 1, defTable and tonumber(defTable.maxLevel))
 end
 
 function def.OnLevelUp(player, newLevel)

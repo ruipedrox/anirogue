@@ -54,7 +54,7 @@ WaveConfig.Waves = {
     { enemies = { { id = "melee_alien", count = 14 }, { id = "ranged_alien", count = 6 }, { id = "cloner_alien", count = 3 } } }, -- Wave 12
     { enemies = { { id = "melee_alien", count = 15 }, { id = "ranged_alien", count = 6 }, { id = "cloner_alien", count = 3 } } }, -- Wave 13
     { enemies = { { id = "melee_alien", count = 16 }, { id = "ranged_alien", count = 7 }, { id = "cloner_alien", count = 4 } } }, -- Wave 14
-    { enemies = { { id = "Freeza", count = 1, position = Vector3.new(148.73, 45.21, 73.4) } } }, -- Wave 15 (Boss: Freeza - Centro do mapa)
+    { enemies = { { id = "Frieza", count = 1, position = Vector3.new(148.73, 45.21, 73.4) } } }, -- Wave 15 (Boss: Freeza - Centro do mapa)
 }
 
 return WaveConfig

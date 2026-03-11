@@ -6,6 +6,8 @@ local Debris = game:GetService("Debris")
 local TweenService = game:GetService("TweenService")
 
 local Damage = require(ReplicatedStorage:WaitForChild("Scripts"):WaitForChild("Combat"):WaitForChild("Damage"))
+local SFXHelper = require(ReplicatedStorage:WaitForChild("Scripts"):WaitForChild("SFXHelper"))
+local SEARING_SFX_ID = 71012984831538
 
 local def = {
     Name = "Searing Frenzy",
@@ -96,6 +98,13 @@ local function applyDamageToBleedingEnemies(player, stats)
     local baseDamage = findPlayerBaseDamage(player)
     local totalDamage = baseDamage * (stats.damagePercent or 0.2)
 
+    -- SFX ao ativar
+    local char = player.Character
+    local hrp = char and (char:FindFirstChild("HumanoidRootPart") or char.PrimaryPart)
+    if hrp then
+        SFXHelper.playAt(hrp, SEARING_SFX_ID, 0.9, { minDist = 15, maxDist = 80, lifetime = 3 })
+    end
+
     for _, model in pairs(CollectionService:GetTagged("Enemy")) do
         if model and model.PrimaryPart then
             if hasBleedEffectOnModel(model) then
@@ -119,8 +128,8 @@ local function applyDamageToBleedingEnemies(player, stats)
     end
 end
 
-function def.OnEquip(player, level)
-    level = math.clamp(level or 1, 1, def.MaxLevel)
+function def.OnEquip(player, level, maxLevel)
+    level = math.clamp(level or 1, 1, maxLevel or def.MaxLevel)
     local userId = player.UserId
     if ActiveByUser[userId] then def.OnUnequip(player) end
 
@@ -187,7 +196,7 @@ end
 
 function def.OnCardAdded(player, defTable, level)
     print(string.format("[Nezuko_SearingFrenzy] OnCardAdded for %s level %s", tostring(player and player.Name), tostring(level)))
-    def.OnEquip(player, level or 1)
+    def.OnEquip(player, level or 1, defTable and tonumber(defTable.maxLevel))
 end
 
 def.Stats = statsPerLevel

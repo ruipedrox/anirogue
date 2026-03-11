@@ -121,9 +121,14 @@ restartBtn.MouseButton1Click:Connect(function()
 end)
 
 exitBtn.MouseButton1Click:Connect(function()
-	-- Return to lobby (teleport or end run)
-	game:GetService("ReplicatedStorage"):SetAttribute("ExitRun", true)
 	print("[DeathMenu] Exit to lobby clicked")
+	-- Fire server remote to save rewards and teleport to lobby
+	local returnRemote = remotesFolder and remotesFolder:FindFirstChild("RunReturnToLobby")
+	if returnRemote then
+		returnRemote:FireServer()
+	else
+		warn("[DeathMenu] RunReturnToLobby remote not found")
+	end
 	if frame then frame.Visible = false end
 	if overlay then overlay.Visible = false end
 end)

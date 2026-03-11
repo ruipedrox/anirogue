@@ -8,7 +8,7 @@ local CharactersModule = {}
 
 -- Default equipped character names (equip both for ability testing)
 -- Default to Jotaro for testing
-CharactersModule.DefaultEquippedNames = { "Sasuke_5", "Kame_4" }
+CharactersModule.DefaultEquippedNames = { "Goku_5", "Kame_4" }
 
 -- Forward declaration to allow usage before definition inside Initialize
 local collectEquippedInstances

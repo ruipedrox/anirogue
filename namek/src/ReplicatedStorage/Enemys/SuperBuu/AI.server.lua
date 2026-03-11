@@ -7,6 +7,12 @@ local ReplicatedStorage = game:GetService("ReplicatedStorage")
 local ScriptsFolder = ReplicatedStorage:WaitForChild("Scripts")
 local CombatFolder = ScriptsFolder:WaitForChild("Combat")
 local Damage = require(CombatFolder:WaitForChild("Damage"))
+local SFXHelper = require(ScriptsFolder:WaitForChild("SFXHelper"))
+local MANY_BEAM_SFX_ID      = 120490147546127
+local CANDY_BEAM_SFX_ID     = 131567785393405
+local SHOUT_SFX_ID          = 83041252354792
+local NORMAL_SFX_ID         = 75572923732885
+local MACHINE_PUNCHES_SFX_ID = 136550902387706
 
 local EnemysFolder = ReplicatedStorage:WaitForChild("Enemys")
 local blobModel = EnemysFolder:FindFirstChild("buu_blob")
@@ -264,8 +270,7 @@ local function performNormalAttack(targetRoot)
 			normalAnim:Play(0.1, 1, 1)
 		end)
 	end
-	
-	-- Wait then deal damage
+	SFXHelper.playAt(root, NORMAL_SFX_ID, 0.7, { minDist = 10, maxDist = 60 })
 	task.wait(0.3)
 	
 	if running and targetRoot and targetRoot.Parent then
@@ -322,6 +327,7 @@ local function performMachinePunches(targetRoot)
 	
 	-- Rapid cone damage for 2 seconds
 	local damageStart = os.clock()
+	SFXHelper.playAt(root, MACHINE_PUNCHES_SFX_ID, 0.7, { minDist = 10, maxDist = 60 })
 	local nextTick = damageStart
 	local damageInterval = 0.3 -- Slower tick rate
 	local damageDuration = 2.5
@@ -413,8 +419,7 @@ local function performCandyBeam(targetRoot)
 			candyBeamAnim:Play(0.1, 1, 1)
 		end)
 	end
-	
-	-- Wait 1 second (charge time)
+	SFXHelper.playAt(root, CANDY_BEAM_SFX_ID, 0.7, { minDist = 10, maxDist = 80 })
 	task.wait(1.0)
 	
 	if not running then
@@ -631,6 +636,7 @@ local function performShout(targetRoot)
 		isAttacking = false
 		return
 	end
+	SFXHelper.playAt(root, SHOUT_SFX_ID, 0.7, { minDist = 10, maxDist = 80 })
 	
 	-- Clone sound_wave model
 	local soundWave = soundWaveModel:Clone()
@@ -783,6 +789,7 @@ local function performManyBeam(targetRoot)
 			manyBeamAnim:Play(0.1, 1, 1)
 		end)
 	end
+	SFXHelper.playAt(root, MANY_BEAM_SFX_ID, 0.7, { minDist = 10, maxDist = 80 })
 	
 	-- Get arena bounds from ReplicatedStorage
 	local arenaBounds = nil

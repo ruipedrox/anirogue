@@ -24,6 +24,8 @@ local ActivePunchByUserId = {}
 -- Execute Serious Punch - damage ALL enemies
 local Damage = require(ReplicatedStorage:WaitForChild("Scripts"):WaitForChild("Combat"):WaitForChild("Damage"))
 local DamageNumbers = require(ReplicatedStorage:WaitForChild("Scripts"):WaitForChild("Combat"):WaitForChild("DamageNumbers"))
+local SFXHelper = require(ReplicatedStorage:WaitForChild("Scripts"):WaitForChild("SFXHelper"))
+local SERIOUS_PUNCH_SFX_ID = 101127853379229
 
 -- Helper: try to find Saitama assets (Fist and ShockWave) under Shared/Chars/Saitama* folders
 local function findSaitamaAsset(name)
@@ -183,7 +185,7 @@ local function executeSeriousPunch(player)
 	end
 
 	-- Move fist down until impact (slower speed for dramatic effect)
-	local impactPos = moveDownAndImpact(fist, startPos, 1000, 40, { char })
+	local impactPos = moveDownAndImpact(fist, startPos, 1000, 37.5, { char })
 	if not impactPos then
 		-- cleanup and return
 		if fist and fist.Parent then fist:Destroy() end
@@ -220,6 +222,19 @@ local function executeSeriousPunch(player)
 	end
 
 	-- Apply damage to all enemies (server-authoritative)
+	-- SFX no impacto
+	do
+		local impactPart = Instance.new("Part")
+		impactPart.Anchored = true
+		impactPart.CanCollide = false
+		impactPart.Transparency = 1
+		impactPart.Size = Vector3.new(1, 1, 1)
+		impactPart.Position = impactPos
+		impactPart.Parent = workspace
+		SFXHelper.playAt(impactPart, SERIOUS_PUNCH_SFX_ID, 1, { minDist = 30, maxDist = 300, lifetime = 5 })
+		task.delay(6, function() pcall(function() impactPart:Destroy() end) end)
+	end
+
 	local enemiesHit = 0
 	for _, enemy in ipairs(CollectionService:GetTagged("Enemy")) do
 		if enemy and enemy:IsA("Model") then

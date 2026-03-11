@@ -6,6 +6,9 @@ local Debris = game:GetService("Debris")
 local TweenService = game:GetService("TweenService")
 
 local Damage = require(ReplicatedStorage:WaitForChild("Scripts"):WaitForChild("Combat"):WaitForChild("Damage"))
+local SFXHelper = require(ReplicatedStorage:WaitForChild("Scripts"):WaitForChild("SFXHelper"))
+
+local DISMANTLE_SFX_ID = 122951695254282
 
 local def = {
     Name = "Dismantle",
@@ -156,6 +159,10 @@ local function performDismantle(player, stats)
     local vis = spawnDismantleVisual(target)
     if not vis then print("[Dismantle] No visual spawned (asset missing)") end
 
+    SFXHelper.playAt(target.PrimaryPart, DISMANTLE_SFX_ID, 0.9, {
+        minDist = 10, maxDist = 70, lifetime = duration + 0.5,
+    })
+
     for i = 1, ticks do
         if not target.Parent then break end
         applyAoeDamageAround(target.PrimaryPart.Position, player, perTick, stats.aoe, stats.stagger)
@@ -163,8 +170,8 @@ local function performDismantle(player, stats)
     end
 end
 
-function def.OnEquip(player, level)
-    level = math.clamp(level or 1, 1, def.MaxLevel)
+function def.OnEquip(player, level, maxLevel)
+    level = math.clamp(level or 1, 1, maxLevel or def.MaxLevel)
     local userId = player.UserId
     if ActiveByUser[userId] then def.OnUnequip(player) end
 
@@ -217,7 +224,7 @@ function def.OnLevelUp(player, newLevel)
 end
 
 function def.OnCardAdded(player, defTable, level)
-    def.OnEquip(player, level or 1)
+    def.OnEquip(player, level or 1, defTable and tonumber(defTable.maxLevel))
 end
 
 def.Stats = statsPerLevel

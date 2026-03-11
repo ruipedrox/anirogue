@@ -2,7 +2,7 @@
 return {
     evolve_to = "Vegeta_5",
     required_level = 1,
-    cost = { Gold = 5000 },
+    cost = { Gold = 25000 },
     copies_req = { { template = "Vegeta_4", count = 3 } },
     copies_mode = "including",
     materials_req = {

@@ -5,6 +5,10 @@ local Players = game:GetService("Players")
 local ReplicatedStorage = game:GetService("ReplicatedStorage")
 local CollectionService = game:GetService("CollectionService")
 
+local ScriptsFolder = ReplicatedStorage:WaitForChild("Scripts")
+local SFXHelper = require(ScriptsFolder:WaitForChild("SFXHelper"))
+local MELEE_SFX_ID = 122615451467676
+
 local RANGE = 3
 local COOLDOWN = 0.5
 local DEFAULT_DAMAGE = 10
@@ -322,6 +326,7 @@ task.spawn(function()
 					local last = lastHitTimes[plr] or 0
 					if now - last >= COOLDOWN then
 						lastHitTimes[plr] = now
+						SFXHelper.playAt(root, MELEE_SFX_ID, 0.7, { minDist = 10, maxDist = 60, lifetime = 2 })
 						phum:TakeDamage(dmg)
 						-- Apply invulnerability frames
 						local invs = getInvTimeSeconds(plr)

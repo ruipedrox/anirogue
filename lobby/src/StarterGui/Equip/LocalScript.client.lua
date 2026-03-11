@@ -842,7 +842,23 @@ updatePreview = function(itemEntry)
 		end
 	end
 	if previewLevelLabel then
-		previewLevelLabel.Text = templateName
+		-- Prefer a human-friendly display name from the stats module or item data when available
+		local displayName = templateName
+		if stats and type(stats) == "table" then
+			if stats.displayName and type(stats.displayName) == "string" then
+				displayName = stats.displayName
+			elseif stats.DisplayName and type(stats.DisplayName) == "string" then
+				displayName = stats.DisplayName
+			end
+		end
+		if itemEntry.data then
+			if itemEntry.data.DisplayName and type(itemEntry.data.DisplayName) == "string" then
+				displayName = itemEntry.data.DisplayName
+			elseif itemEntry.data.Name and type(itemEntry.data.Name) == "string" then
+				displayName = itemEntry.data.Name
+			end
+		end
+		previewLevelLabel.Text = displayName
 	end
 	-- STAT LINES --------------------------------------
 	if previewScroll and statTemplate then

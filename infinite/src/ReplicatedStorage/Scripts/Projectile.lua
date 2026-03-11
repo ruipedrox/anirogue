@@ -318,6 +318,48 @@ function Projectile.Fire(params: FireParams): ProjectileHandle
         end
     }
 
+    -- Initial overlap check: handle case where projectile spawns already intersecting an enemy
+    do
+        local initialRadius = 0.5
+        pcall(function()
+            if basePart and basePart:IsA("BasePart") and basePart.Size then
+                initialRadius = math.max(initialRadius, basePart.Size.Magnitude * 0.5)
+            end
+        end)
+        if initialRadius > 0 then
+            local nearby = workspace:GetPartBoundsInRadius(currentPos, initialRadius, ovParams)
+            if nearby and #nearby > 0 then
+                for _, p in ipairs(nearby) do
+                    local enemyModel = getHumanoidModelFromPart(p)
+                    if enemyModel then
+                        local ownerIsEnemy = params.owner and (typeof(params.owner) == "Instance" and params.owner:IsA("Model")) and isEnemy(params.owner)
+                        local targetIsEnemy = isEnemy(enemyModel)
+                        if not (ownerIsEnemy and targetIsEnemy) then
+                            local now = os.clock()
+                            local cd = typeof(params.hitCooldownPerTarget) == "number" and params.hitCooldownPerTarget or 0.2
+                            local last = lastHitTimes[enemyModel]
+                            if (not last) or (now - last) >= cd then
+                                lastHitTimes[enemyModel] = now
+                                if damage > 0 then
+                                    local hum = enemyModel:FindFirstChildOfClass("Humanoid")
+                                    if hum then Damage.Apply(hum, damage) end
+                                end
+                                if params.onHit then
+                                    task.spawn(params.onHit, findAnyBasePart(enemyModel) :: BasePart, enemyModel)
+                                end
+                                pierce -= 1
+                                if pierce <= 0 then
+                                    handle:Destroy()
+                                    return handle
+                                end
+                            end
+                        end
+                    end
+                end
+            end
+        end
+    end
+
     -- Track projectile by owner for auto-cleanup
     if params.owner then
         if not OwnerProjectiles[params.owner] then

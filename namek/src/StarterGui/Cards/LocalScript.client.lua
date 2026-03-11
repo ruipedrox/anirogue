@@ -3,12 +3,27 @@ print("Hello world!")
 local Players = game:GetService("Players")
 local ReplicatedStorage = game:GetService("ReplicatedStorage")
 local TweenService = game:GetService("TweenService")
+local SoundService = game:GetService("SoundService")
+local Debris = game:GetService("Debris")
 
 -- Data modules
 local CardPool = require(ReplicatedStorage.Scripts.CardPool)
 
 local player = Players.LocalPlayer
 local gui = script.Parent  -- ScreenGui Cards
+
+-- ── Som de carta ──────────────────────────────────────────────────
+local CARD_APPEAR_ID = 9113578180
+local function playCardAppear()
+	local sfxAttr = player:GetAttribute("SFXVolume")
+	local sfxMult = (type(sfxAttr) == "number") and math.clamp(sfxAttr / 100, 0, 1) or 0.5
+	local s = Instance.new("Sound")
+	s.SoundId = "rbxassetid://" .. tostring(CARD_APPEAR_ID)
+	s.Volume  = 0.7 * sfxMult
+	s.Parent  = SoundService
+	s:Play()
+	Debris:AddItem(s, 5)
+end
 local bg = gui:FindFirstChild("BG") -- novo container/overlay
 local selectionLocked = false
 local pendingServerCards = nil -- oferta enviada pelo servidor (se existir)
@@ -224,7 +239,8 @@ local function animateShow(regenerate)
         tween(overlayFrame, TweenInfo.new(0.25, Enum.EasingStyle.Quad, Enum.EasingDirection.Out), { BackgroundTransparency = 0.45 })
     end
 
-    local delayPer = 0.12
+    local delayPer = 0.30
+    local soundDelayPer = 0.30  -- intervalo entre sons de carta (igual ao delay de animação)
     -- Ordem personalizada de entrada: 2,1,3
     local orderIn = { frames[2], frames[1], frames[3] }
     for i, frame in ipairs(orderIn) do
@@ -236,6 +252,7 @@ local function animateShow(regenerate)
                     tween(animObj, TweenInfo.new(0.32, Enum.EasingStyle.Quint, Enum.EasingDirection.Out), { Position = targetPos })
                 end
             end)
+            task.delay((i-1)*soundDelayPer, playCardAppear)
         end
     end
 
@@ -617,9 +634,9 @@ local function attachHover(cardFrame)
 end
 
 -- Integracao com RemoteEvents do servidor
-local Remotes = ReplicatedStorage:FindFirstChild("Remotes")
-local LevelUpEvent = Remotes and Remotes:FindFirstChild("LevelUp")
-local LevelUpChoice = Remotes and Remotes:FindFirstChild("LevelUpChoice")
+local Remotes = ReplicatedStorage:WaitForChild("Remotes", 10)
+local LevelUpEvent = Remotes and Remotes:WaitForChild("LevelUp", 10)
+local LevelUpChoice = Remotes and Remotes:WaitForChild("LevelUpChoice", 10)
 
 if LevelUpEvent then
     LevelUpEvent.OnClientEvent:Connect(function(payload)

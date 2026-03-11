@@ -1,105 +1,4 @@
--- Ensure `CurrentBanner` StringValue exists (single source of truth)
-local ReplicatedStorage = game:GetService("ReplicatedStorage")
-local bannerValue = ReplicatedStorage:FindFirstChild("CurrentBanner")
-if not bannerValue then
-    bannerValue = Instance.new("StringValue")
-    bannerValue.Name = "CurrentBanner"
-    bannerValue.Parent = ReplicatedStorage
-    bannerValue.Value = "" -- initialize empty
-end
-
--- BannerManager.server.lua (delegates generation to BannerManager.module)
-local DataStoreService = game:GetService("DataStoreService")
-local remotes = ReplicatedStorage:WaitForChild("Remotes")
-local BannerUpdated = remotes:FindFirstChild("BannerUpdated")
-local HttpService = game:GetService("HttpService")
-
--- Função para calcular o timestamp do próximo horário de troca (meia em meia hora)
-local function getCurrentBannerTimestamp()
-    local now = os.time()
-    local utc = os.date("!*t", now)
-    local minutes = math.floor(utc.min / 30) * 30
-    utc.min = minutes
-    utc.sec = 0
-    return os.time(utc)
-end
-
--- Função para gerar um novo banner (exemplo, personalize como quiser)
-local function generateBanner()
-    -- Aqui você pode usar seu SummonModule ou lógica customizada
-    return {
-        generatedAt = getCurrentBannerTimestamp(),
-        entries = {
-            -- Exemplo de banner, substitua pela sua lógica real
-            {id = "Goku_5", rarity = 5, icon_id = "rbxassetid://91806970218225"},
-            {id = "Goku_4", rarity = 4, icon_id = "rbxassetid://84530411684994"},
-            {id = "Kame_4", rarity = 4, icon_id = "rbxassetid://93720933756204"},
-            {id = "Goku_3", rarity = 3, icon_id = "rbxassetid://91156103882629"},
-            {id = "Naruto_3", rarity = 3, icon_id = "rbxassetid://135505550864938"},
-            {id = "Krillin_3", rarity = 3, icon_id = "rbxassetid://102208659147364"},
-        }
-    }
-end
-
--- Função para salvar banner no DataStore
-local function saveBanner(banner)
-    local ok, err = pcall(function()
-        BannerDataStore:SetAsync("CurrentBanner", banner)
-    end)
-    if not ok then
-        warn("[BannerManager] Erro ao salvar banner:", err)
-    end
-end
-
--- Função para carregar banner do DataStore
-local function loadBanner()
-    local ok, data = pcall(function()
-        return BannerDataStore:GetAsync("CurrentBanner")
-    end)
-    if ok and data then
-        return data
-    end
-    return nil
-end
-
--- Função principal: garante que o banner está correto para o horário
-local function ensureBanner()
-    local timestamp = getCurrentBannerTimestamp()
-    local banner = loadBanner()
-    if not banner or banner.generatedAt ~= timestamp then
-        banner = generateBanner()
-        saveBanner(banner)
-        print("[BannerManager] Banner gerado e salvo para timestamp:", timestamp)
-    else
-        print("[BannerManager] Banner já está correto para timestamp:", timestamp)
-    end
-    return banner
-end
-
--- Atualiza e envia banner para todos os clientes
-local function broadcastBanner()
-    local banner = ensureBanner()
-    if BannerUpdated then
-        BannerUpdated:FireAllClients(banner)
-        print("[BannerManager] Banner broadcast para todos os clientes.")
-    end
-end
-
--- Timer para atualizar banner a cada minuto (garante troca exata)
-spawn(function()
-    while true do
-        broadcastBanner()
-        wait(60)
-    end
-end)
-
--- Opcional: ao player entrar, envia banner
-game.Players.PlayerAdded:Connect(function(player)
-    local banner = ensureBanner()
-    if BannerUpdated then
-        BannerUpdated:FireClient(player, banner)
-    end
-end)-- BannerManager.server.lua
+-- BannerManager.server.lua
 local ReplicatedStorage = game:GetService("ReplicatedStorage")
 local RunService = game:GetService("RunService")
 local HttpService = game:GetService("HttpService")
@@ -241,10 +140,19 @@ end
 
 -- Attempt to initialize and broadcast or generate initial banner
 local function init()
-    local stored = manager:Load()
-    if stored then
-        print("[BannerManager] Loaded existing banner, broadcasting to clients.")
-        manager:Broadcast(stored)
+    local storedBanner, storedAt = manager:Load()
+    if storedBanner then
+        local lastSaved = storedAt or storedBanner.generatedAt or 0
+        local age = os.time() - lastSaved
+        if age >= ROTATE_SECONDS then
+            print("[BannerManager] Loaded banner is older than rotation window (", age, "s). Generating new banner.")
+            manager:GenerateAndPublish()
+        else
+            print("[BannerManager] Loaded existing banner (age", age, "s), broadcasting to clients and updating ReplicatedStorage.")
+            manager:Broadcast(storedBanner)
+            -- Ensure ReplicatedStorage.CurrentBanner is in sync so clients reading the value get the banner immediately
+            pcall(function() manager:UpdateReplicatedBanner(storedBanner) end)
+        end
     else
         print("[BannerManager] No existing banner found, generating initial banner.")
         manager:GenerateAndPublish()

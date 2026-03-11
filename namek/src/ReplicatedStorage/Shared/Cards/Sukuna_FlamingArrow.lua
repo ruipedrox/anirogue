@@ -485,3 +485,5 @@ end
 function def.OnCardAdded(player, defTable, level)
     def.OnEquip(player, level or 1, defTable and tonumber(defTable.maxLevel))
 end
+
+return def

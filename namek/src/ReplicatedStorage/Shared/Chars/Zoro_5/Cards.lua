@@ -16,7 +16,8 @@ Cards.Definitions = {
         {
             id = "Zoro_Santoryu",
             name = "Santoryu",
-            description = "Zoro 5★ exclusive: Base attack fires additional projectiles. Each card level adds +1 projectile to base attack.",
+                -- (note: this card grants +2 projectiles per card level)
+                description = "Zoro 5★ exclusive: Base attack fires additional projectiles. Each card level adds +2 projectiles to base attack.",
             stackable = false,
             maxLevel = 5,
 			image = "rbxassetid://88248050432141",

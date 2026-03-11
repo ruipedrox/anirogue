@@ -99,6 +99,16 @@ local function resolveItemRarity(itemId)
 	return dropRarityByIdCache and dropRarityByIdCache[itemId] or nil
 end
 
+-- Attempt to require CharacterCatalog for resolving character icons/names
+local CharacterCatalog = nil
+pcall(function()
+	local scripts = ReplicatedStorage:FindFirstChild("Scripts")
+	if scripts then
+		local ok, mod = pcall(function() return require(scripts:FindFirstChild("CharacterCatalog")) end)
+		if ok and mod then CharacterCatalog = mod end
+	end
+end)
+
 -- Rarity -> gradient mapping (Portuguese keys supported)
 local rarityGradients = {
 	comum = ColorSequence.new(Color3.fromRGB(200,200,200), Color3.fromRGB(240,240,240)),
@@ -479,6 +489,14 @@ local function openStoryUI()
 											end
 										end
 
+										-- Diagnostic: print all built entries before rendering
+										pcall(function()
+											print("[StoryUI][DIAG] populateDrops entries:")
+											for i,ee in ipairs(entries) do
+												print(string.format("  entry[%d] kind=%s amount=%s meta_id=%s", i, tostring(ee.kind), tostring(ee.amount), tostring((ee.meta and ee.meta.id) or "<nil>")))
+											end
+										end)
+
 										-- create frames for entries
 										for _, e in ipairs(entries) do
 											local f = template:Clone()
@@ -495,13 +513,61 @@ local function openStoryUI()
 													icon.Image = COIN_ICON
 													-- solid gold background
 													setSolidBG(bg, GOLD_COLOR)
-												else
-													icon.Image = resolveItemIcon(e.meta and e.meta.id)
-													-- gradient by rarity
-													local rarity = toKey(resolveItemRarity(e.meta and e.meta.id) or "comum")
-													local seq = rarityGradients[rarity] or rarityGradients["comum"]
-													setGradientBG(bg, seq)
-												end
+													else
+														-- Support both item drops and character-type drops (e.g., XP3/XP4 units)
+														local metaId = e.meta and e.meta.id
+														local usedIcon = nil
+														local usedSeq = nil
+														local isChar = false
+														if metaId and CharacterCatalog and CharacterCatalog.Get then
+															local okc, cat = pcall(function() return CharacterCatalog:Get(metaId) end)
+															if okc and cat then
+																isChar = true
+																usedIcon = cat.icon_id or (cat.stats and (cat.stats.icon or cat.stats.iscon)) or nil
+																local stars = tonumber(cat.stars) or 1
+																local rarityKey = "comum"
+																if stars >= 5 then rarityKey = "lendario" end
+																if stars == 4 then rarityKey = "epico" end
+																if stars == 3 then rarityKey = "raro" end
+																usedSeq = rarityGradients[rarityKey] or rarityGradients["comum"]
+															else
+																-- Try a broader scan over the catalog to help diagnose mismatches
+																local okAll, all = pcall(function() return CharacterCatalog:GetAllMap() end)
+																if okAll and type(all) == "table" then
+																	for tpl, info in pairs(all) do
+																		if tostring(tpl):lower() == tostring(metaId):lower() or (info and info.displayName and tostring(info.displayName):lower() == tostring(metaId):lower()) then
+																			isChar = true
+																			usedIcon = info.icon_id or (info.stats and (info.stats.icon or info.stats.iscon)) or nil
+																			local stars = tonumber(info.stars) or 1
+																			local rarityKey = "comum"
+																			if stars >= 5 then rarityKey = "lendario" end
+																			if stars == 4 then rarityKey = "epico" end
+																			if stars == 3 then rarityKey = "raro" end
+																			usedSeq = rarityGradients[rarityKey] or rarityGradients["comum"]
+																			pcall(function() print(string.format("[StoryUI][DIAG] matched metaId '%s' to catalog tpl='%s' displayName=%s", tostring(metaId), tostring(tpl), tostring(info.displayName))) end)
+																			break
+																		end
+																	end
+																end
+															end
+														end
+														if not usedIcon then
+															usedIcon = resolveItemIcon(metaId)
+															local rarity = toKey(resolveItemRarity(metaId) or "comum")
+															usedSeq = rarityGradients[rarity] or rarityGradients["comum"]
+														end
+														-- Diagnostic: print resolution outcome for this entry
+														pcall(function()
+															print(string.format("[StoryUI][DIAG] resolve icon for metaId=%s -> usedIcon=%s isChar=%s", tostring(metaId), tostring(usedIcon), tostring(isChar)))
+														end)
+														if usedIcon then
+															icon.Image = usedIcon
+														else
+															-- show a visible fallback so empty slots are obvious during debugging
+															icon.Image = "rbxassetid://101285032767311" -- gem icon as visible fallback
+														end
+														if usedSeq then setGradientBG(bg, usedSeq) end
+													end
 											end
 											if amountLabel and amountLabel:IsA("TextLabel") then
 												amountLabel.Text = tostring(e.amount)
@@ -612,7 +678,9 @@ local function closeStoryUI()
 			if root:IsA("ScreenGui") then root.Enabled = false end
 		end)
 		isOpen = false
-		isAnimating = false
+		isAnimating = false		activeMode = "Story"
+		overrideMapsList = nil		receivedEvent = false
+		task.spawn(keepReady)
 		return
 	end
 	if not container then return end
@@ -632,7 +700,10 @@ local function closeStoryUI()
 	posTween.Completed:Connect(function()
 		pcall(function() container.Visible = false end)
 		isOpen = false
-		isAnimating = false
+		isAnimating = false		activeMode = "Story"
+		overrideMapsList = nil		-- Reset so keepReady restarts and the server can fire again on next touch
+		receivedEvent = false
+		task.spawn(keepReady)
 	end)
 end
 
@@ -701,28 +772,37 @@ openRemote.OnClientEvent:Connect(function(payload)
 		if payload == "Story" then
 			activeMode = "Story"
 			overrideMapsList = nil
-			receivedEvent = true
-			openStoryUI()
 		elseif payload == "Infinite" then
 			activeMode = "Infinite"
 			overrideMapsList = nil
-			receivedEvent = true
-			openStoryUI()
+		else
+			return
 		end
 	elseif type(payload) == "table" then
 		-- accept { mode = "Infinite"/"Story", maps = {...} }
 		if payload.mode then activeMode = tostring(payload.mode) end
 		overrideMapsList = payload.maps or nil
-		receivedEvent = true
-		openStoryUI()
+	else
+		return
 	end
+
+	receivedEvent = true
+
+	-- If a close animation is currently running, wait for it to finish before opening.
+	-- Without this, openStoryUI() would silently return (isAnimating guard) and the
+	-- event would be lost, producing a black UI or no UI on the next open.
+	if isAnimating then
+		local t0 = os.clock()
+		repeat task.wait(0.05) until not isAnimating or (os.clock() - t0) > 2
+	end
+
+	openStoryUI()
 end)
 
-openStoryFunction.OnClientInvoke = function(payload)
-	if payload == "Story" then
-		openStoryUI()
-		return true
-	end
-	return false
+-- OnClientInvoke is used only for server-side confirmation. Opening is handled
+-- exclusively by OnClientEvent to prevent a race where InvokeClient arrives before
+-- FireClient and calls openStoryUI() with the wrong (stale) activeMode.
+openStoryFunction.OnClientInvoke = function(_payload)
+	return isOpen
 end
 

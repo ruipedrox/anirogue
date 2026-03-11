@@ -377,3 +377,43 @@ end
 -- Initial ready signal
 ChestClientReadyRE:FireServer()
 print("[ChestUI] Ready sinalizado ao servidor.")
+
+-- ── Gold Shop: ligar botões aos Developer Products ───────────────────────────
+local MPS = game:GetService("MarketplaceService")
+
+-- Mapa sku -> productId (deve coincidir com DevProducts.server.lua)
+local GOLD_PRODUCTS = {
+    gold_100  = 3550675827,
+    gold_200  = 3550675943,
+    gold_400  = 3550676017,
+    gold_800  = 3550676072,
+    gold_1600 = 3550676148,
+}
+
+local goldShop = frame:FindFirstChild("Gold_Shop")
+if goldShop then
+    local scrollFrame = goldShop:FindFirstChild("ScrollingFrame")
+    if scrollFrame then
+        for sku, productId in pairs(GOLD_PRODUCTS) do
+            local packFrame = scrollFrame:FindFirstChild(sku)
+            if packFrame then
+                local btn = packFrame:FindFirstChildWhichIsA("ImageButton")
+                    or packFrame:FindFirstChildWhichIsA("TextButton")
+                if btn then
+                    btn.MouseButton1Click:Connect(function()
+                        MPS:PromptProductPurchase(player, productId)
+                    end)
+                    print(string.format("[GoldShop] Botão %s ligado ao produto %d", sku, productId))
+                else
+                    warn("[GoldShop] Botão não encontrado em", sku)
+                end
+            else
+                warn("[GoldShop] Frame não encontrado:", sku)
+            end
+        end
+    else
+        warn("[GoldShop] ScrollingFrame não encontrada em Gold_Shop")
+    end
+else
+    warn("[GoldShop] Gold_Shop não encontrado no Frame principal")
+end

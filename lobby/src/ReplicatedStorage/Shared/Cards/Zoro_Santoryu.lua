@@ -55,9 +55,11 @@ local function addUpgrade(player, name, delta)
 end
 
 -- Apply this card's projectile contribution safely (idempotent)
--- 'bonus' should be number of extra projectiles (card level); total projectiles = 1 + bonus
+-- 'bonus' should be the card level; this function converts it to extra projectiles (2 per level)
+-- total projectiles = 1 + extraProjectiles
 local function applyProjectileContribution(player, myFolder, bonus)
-    bonus = tonumber(bonus) or 0
+    local bonusLevels = tonumber(bonus) or 0
+    local extraProjectiles = bonusLevels * 2
     -- ensure RunTrack folder exists
     if not myFolder then return end
     local appliedNV = myFolder:FindFirstChild("AppliedProjectiles")
@@ -78,11 +80,11 @@ local function applyProjectileContribution(player, myFolder, bonus)
         u.Parent = upgrades
     end
 
-    -- Compute new upgrade value by removing our previous contribution and adding the new bonus
-    local newVal = (u.Value - prev) + bonus
+    -- Compute new upgrade value by removing our previous contribution and adding the new extra projectiles
+    local newVal = (u.Value - prev) + extraProjectiles
     u.Value = newVal
 
-    -- Mirror into Stats folder: overwrite/adjust to match the upgrade bonus
+    -- Mirror into Stats folder: overwrite/adjust to match the upgrade bonus (now measured in extra projectiles)
     local stats = player:FindFirstChild("Stats")
     if stats then
         local s = stats:FindFirstChild("ProjectileBonus")
@@ -95,7 +97,7 @@ local function applyProjectileContribution(player, myFolder, bonus)
         s.Value = newVal
     end
 
-    -- Also expose total ProjectileCount (base 1 + bonus*2 so total is always odd) as a Stats NumberValue for consumers
+    -- Also expose total ProjectileCount (base 1 + extraProjectiles) as a Stats NumberValue for consumers
     if stats then
         local tc = stats:FindFirstChild("ProjectileCount")
         if not tc then
@@ -104,21 +106,21 @@ local function applyProjectileContribution(player, myFolder, bonus)
             tc.Value = 1
             tc.Parent = stats
         end
-        tc.Value = 1 + (newVal * 2)
+        tc.Value = 1 + newVal
     end
 
-    if appliedNV then appliedNV.Value = bonus end
+    if appliedNV then appliedNV.Value = extraProjectiles end
     -- debug trace (enabled)
     if true then
         local upgVal = (player:FindFirstChild("Upgrades") and player.Upgrades:FindFirstChild("ProjectileBonus") and player.Upgrades.ProjectileBonus.Value) or nil
         local statsVal = (player:FindFirstChild("Stats") and player.Stats:FindFirstChild("ProjectileCount") and player.Stats.ProjectileCount.Value) or nil
-        print(string.format("[Zoro_Santoryu] apply %s prevApplied=%s bonus=%s upg=%s statsCount=%s", tostring(player and player.Name), tostring(prev), tostring(bonus), tostring(upgVal), tostring(statsVal)))
+        print(string.format("[Zoro_Santoryu] apply %s prevApplied=%s levels=%s extra=%s upg=%s statsCount=%s", tostring(player and player.Name), tostring(prev), tostring(bonusLevels), tostring(extraProjectiles), tostring(upgVal), tostring(statsVal)))
     end
 end
 
-function def.OnEquip(player, level)
+function def.OnEquip(player, level, maxLevel)
     -- allow level 0 (some systems treat card levels as 0-based)
-    level = math.clamp((level ~= nil) and level or 0, 0, def.MaxLevel)
+    level = math.clamp((level ~= nil) and level or 0, 0, maxLevel or def.MaxLevel)
     -- avoid double attach
     if Active[player] then def.OnUnequip(player) end
 
@@ -176,7 +178,7 @@ function def.OnUnequip(player)
 end
 
 function def.OnCardAdded(player, defTable, level)
-    def.OnEquip(player, level or 1)
+    def.OnEquip(player, level or 1, defTable and tonumber(defTable.maxLevel))
 end
 
 function def.OnLevelUp(player, newLevel)

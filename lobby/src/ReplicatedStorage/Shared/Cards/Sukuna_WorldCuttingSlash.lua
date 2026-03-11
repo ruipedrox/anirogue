@@ -7,6 +7,9 @@ local TweenService = game:GetService("TweenService")
 
 local Damage = require(ReplicatedStorage:WaitForChild("Scripts"):WaitForChild("Combat"):WaitForChild("Damage"))
 local DoT = require(ReplicatedStorage:WaitForChild("Scripts"):WaitForChild("Combat"):WaitForChild("DoT"))
+local SFXHelper = require(ReplicatedStorage:WaitForChild("Scripts"):WaitForChild("SFXHelper"))
+
+local WORLD_SLASH_SFX_ID = 123290246899495
 
 local def = {
     Name = "World Cutting Slash",
@@ -27,7 +30,7 @@ local stats = {
     bleedPercent = 0.35, -- portion of base damage applied as bleed over time
     bleedTick = 0.5,
     projectileSpeed = 100,
-    projectileDistance = 50,
+    projectileDistance = 150,
     projectileSize = 3,
 }
 
@@ -214,7 +217,7 @@ local function performWorldSlash(player)
             local hum = mdl:FindFirstChildOfClass("Humanoid")
             if hum and hum.Health > 0 then
                 pcall(function() Damage.Apply(hum, immediateDamage) end)
-                pcall(function() DoT.Apply(hum, { dotType = "bleed", playerDamage = bleedDamage, tick = stats.bleedTick or 0.5 }) end)
+                pcall(function() DoT.Apply(hum, { dotType = "bleed", playerDamage = bleedDamage, tick = stats.bleedTick or 0.5, player = player }) end)
             end
         end
     end
@@ -223,6 +226,10 @@ local function performWorldSlash(player)
     local originCf = hrp.CFrame
     local direction = axisUnit
     spawnProjectileVisual(originCf, direction)
+
+    SFXHelper.playAt(hrp, WORLD_SLASH_SFX_ID, 1.0, {
+        minDist = 15, maxDist = 100, lifetime = 3,
+    })
 end
 
 function def.disableCards(player)
@@ -329,7 +336,7 @@ function def.OnUnequip(player)
 end
 
 function def.OnCardAdded(player, defTable, level)
-    def.OnEquip(player, level or 1)
+    def.OnEquip(player, level or 1, defTable and tonumber(defTable.maxLevel))
 end
 
 function def.OnLevelUp(player, newLevel)

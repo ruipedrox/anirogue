@@ -8,6 +8,9 @@ local CollectionService = game:GetService("CollectionService")
 
 local Projectile = require(ReplicatedStorage:WaitForChild("Scripts"):WaitForChild("Projectile"))
 local Damage = require(ReplicatedStorage:WaitForChild("Scripts"):WaitForChild("Combat"):WaitForChild("Damage"))
+
+local SFXHelper      = require(ReplicatedStorage:WaitForChild("Scripts"):WaitForChild("SFXHelper"))
+local REDSHOT_SFX_ID = 138240839016415
 local TweenService = game:GetService("TweenService")
 local RunService = game:GetService("RunService")
 
@@ -41,11 +44,11 @@ def.id = def.id or script.Name
 -- Stats per level
 local statsPerLevel = {
 	-- chargeTime: seconds to charge before launching; forwardOffset: spawn distance from player
-	[1] = { damagePercent = 1.0, knockbackPower = 30, size = 1.0, cooldown = 6.0, chargeTime = 1.6, forwardOffset = 8 },
-	[2] = { damagePercent = 1.25, knockbackPower = 40, size = 1.5, cooldown = 5.5, chargeTime = 1.5, forwardOffset = 8.5 },
-	[3] = { damagePercent = 1.50, knockbackPower = 50, size = 2.0, cooldown = 5.0, chargeTime = 1.4, forwardOffset = 9 },
+	[1] = { damagePercent = 1.0,  knockbackPower = 30, size = 1.0, cooldown = 6.0, chargeTime = 1.3, forwardOffset = 8 },
+	[2] = { damagePercent = 1.25, knockbackPower = 40, size = 1.5, cooldown = 5.5, chargeTime = 1.3, forwardOffset = 8.5 },
+	[3] = { damagePercent = 1.50, knockbackPower = 50, size = 2.0, cooldown = 5.0, chargeTime = 1.3, forwardOffset = 9 },
 	[4] = { damagePercent = 1.75, knockbackPower = 60, size = 2.5, cooldown = 4.5, chargeTime = 1.3, forwardOffset = 9.5 },
-	[5] = { damagePercent = 2.0, knockbackPower = 70, size = 3.0, cooldown = 4.0, chargeTime = 1.2, forwardOffset = 10 }
+	[5] = { damagePercent = 2.0,  knockbackPower = 70, size = 3.0, cooldown = 4.0, chargeTime = 1.3, forwardOffset = 10 }
 }
 
 -- Track active Red Shot per player
@@ -234,10 +237,10 @@ end
 local function fireRedShot(player, stats)
 	local character = player.Character
 	if not character then return end
-	
+
 	local hrp = character:FindFirstChild("HumanoidRootPart")
 	if not hrp then return end
-	
+
 	-- Spawn the charge visual in front of the player (do not change part size)
 	local forward = hrp.CFrame.LookVector
 	local spawnPos = hrp.Position + forward * ((stats.forwardOffset or 4) + (stats.size or 1)) + Vector3.new(0, 0.5, 0)
@@ -246,6 +249,14 @@ local function fireRedShot(player, stats)
 		chargeModel:PivotTo(CFrame.new(spawnPos, spawnPos + forward))
 	end
 	chargeModel.Parent = workspace
+
+	-- SFX 3D: tocar no modelo do charge (segue o projétil)
+	do
+		local sfxPart = chargeModel:IsA("Model") and chargeModel.PrimaryPart or (chargeModel:IsA("BasePart") and chargeModel)
+		if sfxPart then
+			SFXHelper.playAt(sfxPart, REDSHOT_SFX_ID, 0.85, { minDist = 15, maxDist = 80, lifetime = 3 })
+		end
+	end
 
 	-- capture particle original rates for transition
 	local particleRates = {}
@@ -377,8 +388,8 @@ local function fireRedShot(player, stats)
 	})
 end
 
-function def.OnEquip(player, level)
-	level = math.clamp(level or 1, 1, def.MaxLevel)
+function def.OnEquip(player, level, maxLevel)
+	level = math.clamp(level or 1, 1, maxLevel or def.MaxLevel)
 	local userId = player.UserId
 	
 	-- Clean up existing
@@ -450,7 +461,7 @@ end
 
 -- Compatibility for CardDispatcher: called when a card instance is added (levelable/stackable support)
 function def.OnCardAdded(player, defTable, level)
-    def.OnEquip(player, level or 1)
+    def.OnEquip(player, level or 1, defTable and tonumber(defTable.maxLevel))
 end
 
 return def

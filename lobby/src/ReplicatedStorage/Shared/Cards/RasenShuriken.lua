@@ -10,6 +10,8 @@ local ScriptsFolder = ReplicatedStorage:WaitForChild("Scripts")
 local Projectile = require(ScriptsFolder:WaitForChild("Projectile"))
 local Damage = require(ScriptsFolder:WaitForChild("Combat"):WaitForChild("Damage"))
 local Crit = require(ScriptsFolder:WaitForChild("Combat"):WaitForChild("Crit"))
+local SFXHelper          = require(ScriptsFolder:WaitForChild("SFXHelper"))
+local RASEN_SFX_ID       = 627664717
 
 local M = {}
 
@@ -227,6 +229,9 @@ function M.Start(player: Player)
             driverPart.CFrame = startCF
             local tween = TweenService:Create(driverPart, TweenInfo.new(lifeTime, Enum.EasingStyle.Linear), { CFrame = endCF })
             tween:Play()
+
+            -- SFX no lançamento
+            SFXHelper.playAt(driverPart, RASEN_SFX_ID, 0.85, { minDist = 15, maxDist = 80, lifetime = 3 })
 
             local thisProj = proj
             local destroyed = false

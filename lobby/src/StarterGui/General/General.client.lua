@@ -823,6 +823,22 @@ if btnSettings and btnSettings:IsA("ImageButton") then
 	btnSettings.MouseButton1Click:Connect(toggleSettings)
 end
 
+-- Summon button: teleport character to the "Summon" part in Workspace
+local btnSummon = leftGui:FindFirstChild("Summon")
+if btnSummon and btnSummon:IsA("ImageButton") then
+	btnSummon.MouseButton1Click:Connect(function()
+		playClickSFX()
+		local char = player.Character
+		local hrp = char and char:FindFirstChild("HumanoidRootPart")
+		local summonPart = workspace:FindFirstChild("Summon", true)
+		if hrp and summonPart then
+			hrp.CFrame = CFrame.new(summonPart.Position + Vector3.new(0, 3, 0))
+		else
+			warn("[General] Summon part não encontrada no Workspace ou personagem não pronto")
+		end
+	end)
+end
+
 -- Permitir clicar em um slot equipado para abrir inventário já focado naquele personagem
 local function setupSlotClickHandlers() end -- placeholder redefinido depois
 

@@ -6,8 +6,12 @@ local ReplicatedStorage = game:GetService("ReplicatedStorage")
 local RunService = game:GetService("RunService")
 local CollectionService = game:GetService("CollectionService")
 
-local Projectile = require(ReplicatedStorage:WaitForChild("Scripts"):WaitForChild("Projectile"))
-local Damage = require(ReplicatedStorage:WaitForChild("Scripts"):WaitForChild("Combat"):WaitForChild("Damage"))
+local ScriptsFolder = ReplicatedStorage:WaitForChild("Scripts")
+local Projectile = require(ScriptsFolder:WaitForChild("Projectile"))
+local Damage = require(ScriptsFolder:WaitForChild("Combat"):WaitForChild("Damage"))
+local SFXHelper = require(ScriptsFolder:WaitForChild("SFXHelper"))
+
+local GETSUGA_SFX_ID = 108647485865798
 
 local def = {
 	Name = "Getsuga Tenshou",
@@ -120,7 +124,10 @@ local function fireGetsuga(player, level)
 	if not char then return end
 	local hrp = char:FindFirstChild("HumanoidRootPart")
 	if not hrp then return end
-	
+
+	-- SFX ao disparar
+	SFXHelper.playAt(hrp, GETSUGA_SFX_ID, 0.9, { minDist = 15, maxDist = 80, lifetime = 4 })
+
 	-- Get base damage from player stats
 	local playerStats = player:FindFirstChild("Stats")
 	local baseDamage = 10
@@ -283,7 +290,20 @@ local function startGetsugaLoop(player, level)
 end
 
 function def.OnCardAdded(player: Player, cardData, currentLevel: number)
-	local level = math.clamp(currentLevel or 1, 1, def.MaxLevel)
+	local maxLv = (type(cardData) == "table" and tonumber(cardData.maxLevel)) or def.MaxLevel
+	local level = math.clamp(currentLevel or 1, 1, maxLv)
+
+	-- Regista nível no RunTrack para que CardPool pare de oferecer ao atingir max level
+	do
+		local cardId = (type(cardData) == "table" and cardData.id) or "Ichigo_Legendary_Getsuga"
+		local runTrack = player:FindFirstChild("RunTrack")
+		if not runTrack then runTrack = Instance.new("Folder") runTrack.Name = "RunTrack" runTrack.Parent = player end
+		local myFolder = runTrack:FindFirstChild(cardId) or Instance.new("Folder")
+		myFolder.Name = cardId; myFolder.Parent = runTrack
+		local lvlNV = myFolder:FindFirstChild("Level") or Instance.new("IntValue")
+		lvlNV.Name = "Level"; lvlNV.Value = level; lvlNV.Parent = myFolder
+	end
+
 	local stats = statsPerLevel[level]
 	
 	if not stats then

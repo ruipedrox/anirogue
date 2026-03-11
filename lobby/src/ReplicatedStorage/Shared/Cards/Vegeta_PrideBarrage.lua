@@ -12,6 +12,9 @@ pcall(function()
     Damage = require(ReplicatedStorage.Scripts.Combat.Damage)
 end)
 
+local SFXHelper = require(ReplicatedStorage:WaitForChild("Scripts"):WaitForChild("SFXHelper"))
+local KI_BLAST_SFX_ID = 81487890423399
+
 local def = {
     Name = "Pride Barrage",
     Rarity = "Legendary",
@@ -97,6 +100,7 @@ local function spawnKiBlast(player, startCFrameOrPos, targetPos, lifetime)
     end
 
     part.CFrame = CFrame.new(startPos)
+    SFXHelper.playAt(part, KI_BLAST_SFX_ID, 0.75, { minDist = 10, maxDist = 60, lifetime = (lifetime or 0.5) + 0.5 })
     local total = lifetime or 0.5
 
     -- Create a quadratic Bezier curve: start -> control -> target
@@ -253,8 +257,8 @@ end
 -- Active lifecycle: allow repeated automatic firing based on cooldown
 local ActiveByUser = {}
 
-function def.OnEquip(player, level)
-    level = math.clamp(level or 1, 1, def.MaxLevel)
+function def.OnEquip(player, level, maxLevel)
+    level = math.clamp(level or 1, 1, maxLevel or def.MaxLevel)
     local userId = player.UserId
     if ActiveByUser[userId] then def.OnUnequip(player) end
 
@@ -307,7 +311,5 @@ function def.OnLevelUp(player, newLevel)
 end
 
 function def.OnCardAdded(player, defTable, level)
-    def.OnEquip(player, level or 1)
+    def.OnEquip(player, level or 1, defTable and tonumber(defTable.maxLevel))
 end
-
-return def

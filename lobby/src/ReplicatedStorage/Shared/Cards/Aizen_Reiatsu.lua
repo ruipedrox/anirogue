@@ -13,6 +13,9 @@ pcall(function()
     Damage = require(ReplicatedStorage.Scripts.Combat.Damage)
 end)
 
+local SFXHelper = require(ReplicatedStorage:WaitForChild("Scripts"):WaitForChild("SFXHelper"))
+local REIATSU_SFX_ID = 115610095182136
+
 -- Active state per player
 local _active = {} -- [player] = { inst = table }
 
@@ -104,6 +107,14 @@ end
 local function startAuraForPlayer(player, def, level)
     if not player or not player.Character then return end
     level = math.clamp(tonumber(level) or 1, 1, 5)
+
+    -- SFX ao activar o reiatsu
+    local _char = player.Character
+    local _hrp = _char and (_char:FindFirstChild("HumanoidRootPart") or _char.PrimaryPart)
+    if _hrp then
+        SFXHelper.playAt(_hrp, REIATSU_SFX_ID, 0.85, { minDist = 15, maxDist = 80, lifetime = 3 })
+    end
+
     local stats = statsPerLevel[level] or statsPerLevel[1]
     local cfg = {}
     -- populate cfg from the per-level stats (no separate DEFAULTS table)

@@ -46,8 +46,9 @@ GokuCards.Definitions = {
 			cooldownPerLevel = -1, -- per level change
 			baseDamagePercent = 10, -- percent of player's damage per tick at level 1
 			damagePercentPerLevel = 10, -- +10% per additional level
-			sizePerLevel = 0.20, -- +20% per additional level (relative to base)
-			duration = 3, -- beam active duration (seconds)
+			sizePerLevel = 0, -- +20% per additional level (relative to base)
+			duration = 4, -- beam active duration (seconds)
+			chargeTime = 3, -- charge duration (seconds)
 		}
 	},
 	-- Stat cards moved to equipment; no Rare/Common stat entries here

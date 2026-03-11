@@ -75,8 +75,8 @@ function def.applyStacksToBase(player, stacks, myFolder)
     end
 end
 
-function def.OnEquip(player, level)
-    level = math.clamp(level or 1, 1, def.MaxLevel)
+function def.OnEquip(player, level, maxLevel)
+    level = math.clamp(level or 1, 1, maxLevel or def.MaxLevel)
     -- avoid double attach
     if Active[player] then def.OnUnequip(player) end
 
@@ -157,7 +157,7 @@ function def.OnUnequip(player)
 end
 
 function def.OnCardAdded(player, defTable, level)
-    def.OnEquip(player, level or 1)
+    def.OnEquip(player, level or 1, defTable and tonumber(defTable.maxLevel))
 end
 
 function def.OnLevelUp(player, newLevel)

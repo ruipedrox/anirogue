@@ -6,6 +6,8 @@ local Debris = game:GetService("Debris")
 local TweenService = game:GetService("TweenService")
 
 local Damage = require(ReplicatedStorage:WaitForChild("Scripts"):WaitForChild("Combat"):WaitForChild("Damage"))
+local SFXHelper              = require(ReplicatedStorage:WaitForChild("Scripts"):WaitForChild("SFXHelper"))
+local EXPLOSION_SFX_ID       = 135670616983730
 
 local def = {
     Name = "Explosive Scrolls",
@@ -164,6 +166,17 @@ local function explodeScroll(scrollModel, ownerPlayer, stats)
         return
     end
 
+    -- SFX 3D na posição da explosão
+    do
+        local anchor = Instance.new("Part")
+        anchor.Anchored = true; anchor.CanCollide = false; anchor.Transparency = 1
+        anchor.Size = Vector3.new(0.5,0.5,0.5)
+        anchor.Position = pos
+        anchor.Parent = workspace
+        SFXHelper.playAt(anchor, EXPLOSION_SFX_ID, 0.85, { minDist = 15, maxDist = 80, lifetime = 3 })
+        game:GetService("Debris"):AddItem(anchor, 4)
+    end
+
     -- damage enemies in explosion radius (horizontal distance only)
     for _, mdl in ipairs(CollectionService:GetTagged("Enemy")) do
         local enemyPos = getModelPosition(mdl)
@@ -191,8 +204,8 @@ local function explodeScroll(scrollModel, ownerPlayer, stats)
     scrollModel:Destroy()
 end
 
-function def.OnEquip(player, level)
-    level = math.clamp(level or 1, 1, def.MaxLevel)
+function def.OnEquip(player, level, maxLevel)
+    level = math.clamp(level or 1, 1, maxLevel or def.MaxLevel)
     local uid = player.UserId
     if ActiveByUser[uid] then def.OnUnequip(player) end
 
@@ -330,7 +343,7 @@ end
 
 function def.OnCardAdded(player, defTable, level)
     local lvl = tonumber(level) or 1
-    def.OnEquip(player, lvl)
+    def.OnEquip(player, lvl, defTable and tonumber(defTable.maxLevel))
 
     -- trigger ability immediately: spawn N scrolls around the player
     local uid = player and player.UserId

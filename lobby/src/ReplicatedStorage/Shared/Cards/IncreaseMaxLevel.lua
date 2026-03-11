@@ -10,15 +10,18 @@ local PER_LEVEL_BONUS = 0.10
 
 local IncreaseMaxLevel = {}
 
-local function getLevelObjects(player)
+-- Use the card's own id as the RunTrack folder name so the generic CardPool maxLevel
+-- check (which looks for RunTrack/<card.id>/Level) correctly finds the current level.
+local function getLevelObjects(player, cardId)
+	local folderName = (type(cardId) == "string" and #cardId > 0) and cardId or MODULE_FOLDER_NAME
 	local runTrack = player:FindFirstChild("RunTrack")
 	if not runTrack then
 		runTrack = Instance.new("Folder")
 		runTrack.Name = "RunTrack"
 		runTrack.Parent = player
 	end
-	local folder = runTrack:FindFirstChild(MODULE_FOLDER_NAME) or Instance.new("Folder")
-	folder.Name = MODULE_FOLDER_NAME
+	local folder = runTrack:FindFirstChild(folderName) or Instance.new("Folder")
+	folder.Name = folderName
 	folder.Parent = runTrack
 	local level = folder:FindFirstChild(VALUE_NAME) or Instance.new("IntValue")
 	level.Name = VALUE_NAME
@@ -56,7 +59,7 @@ local function applyBonus(player, currentCardLevel)
 end
 
 function IncreaseMaxLevel.Apply(player, meta)
-	local folder, level = getLevelObjects(player)
+	local folder, level = getLevelObjects(player, meta and meta.id)
 	local current = level.Value or 0
 	local newLevel = math.min((current + 1), meta.maxLevel or 1)
 	level.Value = newLevel

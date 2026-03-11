@@ -11,6 +11,9 @@ local Scripts = ReplicatedStorage:WaitForChild("Scripts")
 local Damage = require(Scripts:WaitForChild("Combat"):WaitForChild("Damage"))
 local DoT = require(Scripts:WaitForChild("Combat"):WaitForChild("DoT"))
 
+local SFXHelper        = require(Scripts:WaitForChild("SFXHelper"))
+local BURN_AURA_SFX_ID = 80897708363110
+
 local def = {
     Name = "Flame Spin",
     Rarity = "Epic",
@@ -135,7 +138,7 @@ function def.Fire(player, level, onFinished)
             end
             pcall(function() Damage.Apply(hum, instantDamage, { damageType = "flame_spin" }) end)
             pcall(function()
-                DoT.Apply(hum, { dotType = "burn", playerDamage = dotPlayerDamage, tick = burnTick })
+                DoT.Apply(hum, { dotType = "burn", playerDamage = dotPlayerDamage, tick = burnTick, player = player })
             end)
         end
     end
@@ -153,6 +156,14 @@ function def.Fire(player, level, onFinished)
             local model = template:Clone()
             if not model then return end
             model.Parent = workspace
+
+            -- SFX 3D: tocar no modelo visual do ataque
+            do
+                local sfxPart = model:IsA("Model") and (model.PrimaryPart or model:FindFirstChildWhichIsA("BasePart")) or (model:IsA("BasePart") and model)
+                if sfxPart then
+                    SFXHelper.playAt(sfxPart, BURN_AURA_SFX_ID, 0.85, { minDist = 15, maxDist = 80, lifetime = 4, follow = true })
+                end
+            end
 
             local char = player and player.Character
             local hrp = char and (char:FindFirstChild("HumanoidRootPart") or char.PrimaryPart)
@@ -211,8 +222,8 @@ function def.Fire(player, level, onFinished)
     if type(onFinished) == "function" then pcall(onFinished) end
 end
 
-function def.OnEquip(player, level)
-    level = math.clamp(tonumber(level) or 1, 1, def.MaxLevel)
+function def.OnEquip(player, level, maxLevel)
+    level = math.clamp(tonumber(level) or 1, 1, maxLevel or def.MaxLevel)
     if Active[player] then def.OnUnequip(player) end
 
     local rt = player:FindFirstChild("RunTrack") or ensureFolder(player, "RunTrack")
@@ -253,7 +264,7 @@ function def.OnUnequip(player)
 end
 
 function def.OnCardAdded(player, defTable, level)
-    def.OnEquip(player, level or 1)
+    def.OnEquip(player, level or 1, defTable and tonumber(defTable.maxLevel))
 end
 
 function def.OnLevelUp(player, newLevel)

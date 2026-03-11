@@ -13,6 +13,9 @@ local OnHit = require(ScriptsFolder:WaitForChild("Combat"):WaitForChild("OnHit")
 local Damage = require(ScriptsFolder:WaitForChild("Combat"):WaitForChild("Damage"))
 local Crit = require(ScriptsFolder:WaitForChild("Combat"):WaitForChild("Crit"))
 local DoT = require(ScriptsFolder:WaitForChild("Combat"):WaitForChild("DoT"))
+local SFXHelper = require(ScriptsFolder:WaitForChild("SFXHelper"))
+
+local CLONE_SPAWN_SFX_ID = 101786084555192
 
 local M = {}
 local ActiveByUserId: {[number]: number} = {}
@@ -286,6 +289,11 @@ function M.Spawn(player: Player, position: Vector3, duration: number)
     -- keep physics enabled; only ensure server network ownership
     setNetworkOwnerServer(model)
     model:PivotTo(spawnCF)
+
+    -- SFX spawn
+    if rootPart then
+        SFXHelper.playAt(rootPart, CLONE_SPAWN_SFX_ID, 0.85, { minDist = 15, maxDist = 80, lifetime = 3 })
+    end
 
     -- Tag it as a clone
     CollectionService:AddTag(model, "ShadowClone")

@@ -1,5 +1,6 @@
 -- BlueShot.lua
 -- Spawns a "Blue" mass orbiting the player that pulls nearby enemies inward.
+print("[BlueShot] MODULE REQUIRED <<<")
 
 local ReplicatedStorage = game:GetService("ReplicatedStorage")
 local RunService = game:GetService("RunService")
@@ -7,6 +8,9 @@ local CollectionService = game:GetService("CollectionService")
 local TweenService = game:GetService("TweenService")
 
 local Damage = require(ReplicatedStorage:WaitForChild("Scripts"):WaitForChild("Combat"):WaitForChild("Damage"))
+
+local SFXHelper        = require(ReplicatedStorage:WaitForChild("Scripts"):WaitForChild("SFXHelper"))
+local BLUESHOT_SFX_ID  = 95527239456288
 
 local def = {
     Name = "BlueShot",
@@ -54,7 +58,12 @@ local function createBlueModel(character, size)
     if BlueAsset then
         local clone = BlueAsset:Clone()
         clone.Name = "BlueShotEffect"
-        -- Anchor and sanitize all BaseParts so they don't fall through terrain
+        -- Sanitizar a própria part E os descendentes (GetDescendants não inclui o clone em si)
+        if clone:IsA("BasePart") then
+            clone.CanCollide = false
+            clone.Massless   = true
+            clone.Anchored   = true
+        end
         for _, d in ipairs(clone:GetDescendants()) do
             if d:IsA("BasePart") then
                 d.CanCollide = false
@@ -67,9 +76,10 @@ local function createBlueModel(character, size)
             local primary = clone.PrimaryPart or clone:FindFirstChildWhichIsA("BasePart")
             if primary then
                 clone.PrimaryPart = primary
-                -- position slightly above ground for reliable hits
-                primary.CFrame = CFrame.new(hrp.Position + Vector3.new(0, 0.5, 0))
             end
+            clone.Parent = workspace
+            -- PivotTo moves the WHOLE model so relative offsets are correct before SetPrimaryPartCFrame ever runs
+            pcall(function() clone:PivotTo(CFrame.new(hrp.Position + Vector3.new(0, 1, 0))) end)
         elseif clone:IsA("BasePart") then
             clone.Size = Vector3.new(size, size, size)
             clone.CFrame = CFrame.new(hrp.Position + Vector3.new(0, 0.5, 0))
@@ -151,14 +161,15 @@ local function pullEnemiesTowards(position, stats, dt, ownerPlayer, trappedTable
 end
 
 local function fireBlueShot(player, stats, onFinished)
-    if not player or not player.Parent then return end
+    print("[BlueShot] fireBlueShot called for", player and player.Name)
+    if not player or not player.Parent then print("[BlueShot] abort: player invalid") return end
     local character = player.Character
-    if not character then return end
+    if not character then print("[BlueShot] abort: no character") return end
     local hrp = character:FindFirstChild("HumanoidRootPart")
-    if not hrp then return end
+    if not hrp then print("[BlueShot] abort: no HRP") return end
 
     local model = createBlueModel(character, stats.orbitRadius * 2)
-    if not model then return end
+    if not model then print("[BlueShot] abort: no model") return end
 
     local alive = true
     local elapsed = 0
@@ -167,6 +178,13 @@ local function fireBlueShot(player, stats, onFinished)
     local tickAcc = 0
     local connection
     local primaryPart = model:IsA("Model") and (model.PrimaryPart or model:FindFirstChildWhichIsA("BasePart")) or (model:IsA("BasePart") and model)
+
+    -- SFX 3D: tocar na part do modelo em workspace, com loop durante toda a duração
+    local sfxPart = primaryPart or (model:IsA("Model") and model.PrimaryPart) or (model:IsA("BasePart") and model)
+    local sfxSound = nil
+    if sfxPart then
+        sfxSound = SFXHelper.playAt(sfxPart, BLUESHOT_SFX_ID, 0.85, { minDist = 15, maxDist = 80, lifetime = stats.activeDuration + 1, loop = true })
+    end
     local trapped = {}
 
     local function untrapAll()
@@ -227,6 +245,7 @@ local function fireBlueShot(player, stats, onFinished)
             alive = false
             connection:Disconnect()
             untrapAll()
+            if sfxSound and sfxSound.Parent then pcall(function() sfxSound:Stop() end) end
             if model and model.Parent then model:Destroy() end
             return
         end
@@ -310,6 +329,7 @@ local function fireBlueShot(player, stats, onFinished)
             alive = false
             connection:Disconnect()
             untrapAll()
+            if sfxSound and sfxSound.Parent then pcall(function() sfxSound:Stop() end) end
             if model and model.Parent then model:Destroy() end
             if type(onFinished) == "function" then
                 pcall(onFinished)
@@ -322,6 +342,7 @@ local function fireBlueShot(player, stats, onFinished)
         if not alive then return end
         alive = false
         if connection then pcall(function() connection:Disconnect() end) end
+        if sfxSound and sfxSound.Parent then pcall(function() sfxSound:Stop() end) end
         -- fade-out visuals then cleanup
         local fadeOutTime = 0.18
         for _, p in ipairs(parts) do
@@ -350,9 +371,10 @@ local function fireBlueShot(player, stats, onFinished)
     return controller
 end
 
-function def.OnEquip(player, level)
-    level = math.clamp(level or 1, 1, def.MaxLevel)
+function def.OnEquip(player, level, maxLevel)
+    level = math.clamp(level or 1, 1, maxLevel or def.MaxLevel)
     local uid = player.UserId
+    print("[BlueShot] OnEquip called for", player.Name, "level", level)
     if ActiveBlueShotByUserId[uid] then
         def.OnUnequip(player)
     end
@@ -387,6 +409,7 @@ function def.OnEquip(player, level)
             -- spawn a blue shot and enter cooldown
             if not state.active then
                 state.active = true
+                print("[BlueShot] spawning BlueShot for", player.Name)
                 local controller = nil
                 local ok, err = pcall(function()
                     controller = fireBlueShot(player, stats, function()
@@ -396,6 +419,7 @@ function def.OnEquip(player, level)
                     end)
                 end)
                 if not ok then
+                    warn("[BlueShot] fireBlueShot error:", err)
                     state.active = false
                     state.waitingForCooldown = true
                     state.cooldownAcc = 0
@@ -430,7 +454,7 @@ end
 
 -- Compatibility for CardDispatcher: called when a card instance is added (levelable/stackable support)
 function def.OnCardAdded(player, defTable, level)
-    def.OnEquip(player, level or 1)
+    def.OnEquip(player, level or 1, defTable and tonumber(defTable.maxLevel))
 end
 
 return def

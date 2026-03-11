@@ -45,8 +45,8 @@ GojoCards.Definitions = {
 			image = "rbxassetid://88996889608340",
 			module = "PurpleShot",
 			requiredCards = {
-				{ cardId = "Gojo_RedShot", minLevel = 5 },
-				{ cardId = "Gojo_BlueShot", minLevel = 5 },
+				{ cardId = "Gojo_RedShot", minLevel = 1 },
+				{ cardId = "Gojo_BlueShot", minLevel = 1 },
 			},
 		},
 	},

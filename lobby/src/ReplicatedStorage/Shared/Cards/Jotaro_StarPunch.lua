@@ -9,6 +9,8 @@ local Debris = game:GetService("Debris")
 
 local Scripts = ReplicatedStorage:WaitForChild("Scripts")
 local Damage = require(Scripts:WaitForChild("Combat"):WaitForChild("Damage"))
+local SFXHelper         = require(Scripts:WaitForChild("SFXHelper"))
+local STARPUNCH_SFX_ID  = 8704616653
 
 local def = {
     Name = "Star Punch",
@@ -143,6 +145,13 @@ function def.Fire(player, level, onFinished)
     local originPos, lookVec = getOriginAndLook(player)
     if not originPos then if type(onFinished) == "function" then pcall(onFinished) end return end
 
+    -- SFX
+    local char = player.Character
+    local hrp = char and (char:FindFirstChild("HumanoidRootPart") or char.PrimaryPart)
+    if hrp then
+        SFXHelper.playAt(hrp, STARPUNCH_SFX_ID, 0.85, { minDist = 15, maxDist = 80, lifetime = 3 })
+    end
+
     local halfAngle = math.rad(coneDeg / 2)
     local enemies = findEnemiesInCone(originPos, lookVec, range, halfAngle)
 
@@ -169,8 +178,8 @@ function def.Fire(player, level, onFinished)
     if type(onFinished) == "function" then pcall(onFinished) end
 end
 
-function def.OnEquip(player, level)
-    level = math.clamp(tonumber(level) or 1, 1, def.MaxLevel)
+function def.OnEquip(player, level, maxLevel)
+    level = math.clamp(tonumber(level) or 1, 1, maxLevel or def.MaxLevel)
     if Active[player] then def.OnUnequip(player) end
 
     local rt = player:FindFirstChild("RunTrack") or Instance.new("Folder")
@@ -208,7 +217,7 @@ function def.OnUnequip(player)
 end
 
 function def.OnCardAdded(player, defTable, level)
-    def.OnEquip(player, level or 1)
+    def.OnEquip(player, level or 1, defTable and tonumber(defTable.maxLevel))
 end
 
 function def.OnLevelUp(player, newLevel)

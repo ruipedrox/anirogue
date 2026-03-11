@@ -45,6 +45,19 @@ local MESSAGE_TOPIC = "BannerUpdated_v1"
 
 local ds = DataStoreService:GetDataStore(DATASTORE_NAME)
 
+-- Ensure a `CurrentBanner` StringValue exists in ReplicatedStorage immediately so client UI
+-- scripts calling `WaitForChild("CurrentBanner")` do not yield indefinitely while leader
+-- election or banner generation completes. Value will be updated by UpdateReplicatedBanner.
+do
+    local existing = ReplicatedStorage:FindFirstChild("CurrentBanner")
+    if not existing then
+        local v = Instance.new("StringValue")
+        v.Name = "CurrentBanner"
+        v.Value = "" -- empty until a banner is generated/loaded
+        v.Parent = ReplicatedStorage
+    end
+end
+
 local remotesFolder = ReplicatedStorage:FindFirstChild("Remotes")
 if not remotesFolder then
     remotesFolder = Instance.new("Folder")
@@ -100,7 +113,8 @@ function BannerManager:Save(banner)
     while attempts < maxAttempts do
         attempts = attempts + 1
         local ok, err = pcall(function()
-            ds:SetAsync(KEY, banner)
+            -- Save a wrapper with banner and timestamp to allow leaders to honor rotation windows
+            ds:SetAsync(KEY, { banner = banner, savedAt = os.time() })
         end)
         if ok then return true end
         warn("[BannerManager] Save attempt", attempts, "failed:", err)
@@ -124,7 +138,16 @@ function BannerManager:Load()
         local ok, res = pcall(function()
             return ds:GetAsync(KEY)
         end)
-        if ok then return res end
+        if ok then
+            -- Support legacy saved value (banner table) or new wrapper { banner, savedAt }
+            if type(res) == "table" and res.banner then
+                return res.banner, res.savedAt
+            elseif type(res) == "table" and res.generatedAt then
+                return res, res.generatedAt
+            else
+                return res, nil
+            end
+        end
         warn("[BannerManager] Load attempt", attempts, "failed:", res)
         wait(delaySecs)
         delaySecs = delaySecs * 2
@@ -232,11 +255,8 @@ end
 
 -- Messaging subscription
 
--- On startup, always generate and broadcast a new banner
-spawn(function()
-    wait(1) -- Give time for everything to initialize
-    print("[BannerManager] Forcing new banner generation and broadcast on startup...")
-    BannerManager:GenerateAndPublish()
-end)
+-- NOTE: Do not auto-generate on module require; BannerManager.server.lua will
+-- control initial load/generation and leader-driven rotations. This avoids
+-- unexpected banner changes when a single server starts after a full downtime.
 
 return BannerManager
